@@ -1,144 +1,303 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { 
+  collection, 
+  doc, 
+  getDocs, 
+  getDoc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  where, 
+  orderBy, 
+  limit,
+  serverTimestamp,
+  Timestamp,
+  DocumentData,
+  QueryDocumentSnapshot
+} from 'firebase/firestore';
+import { auth, db } from '../../firebase';
 import { Entry, EntryCategory, SupplementEntry, NutritionEntry, FitnessEntry, WellnessEntry, HealthEntry, MedicineEntry, BaseEntry } from '../types';
 
-const STORAGE_KEYS = {
-  ENTRIES: 'entries',
-  ENTRY_TEMPLATES: 'entry_templates',
-};
-
 export class EntryService {
-  // Generate unique ID for entries
-  static generateId(): string {
-    return Date.now().toString() + Math.random().toString(36).substr(2, 9);
+  // Get current user ID with fallback
+  private static getCurrentUserId(): string | null {
+    return auth.currentUser?.uid || null;
   }
 
-  // Get all entries for a specific category
-  static async getEntriesByCategory(category: EntryCategory): Promise<Entry[]> {
+  // Check if user is authenticated
+  private static isAuthenticated(): boolean {
+    return !!auth.currentUser;
+  }
+
+  // Get user's entries collection reference
+  private static getUserEntriesCollection(userId: string) {
+    return collection(db, 'users', userId, 'entries');
+  }
+
+  // Convert Firestore timestamp to ISO string
+  private static timestampToISO(timestamp: Timestamp | null): string {
+    return timestamp ? timestamp.toDate().toISOString() : new Date().toISOString();
+  }
+
+  // Convert ISO string to Firestore timestamp
+  private static isoToTimestamp(isoString: string): Timestamp {
+    return Timestamp.fromDate(new Date(isoString));
+  }
+
+  // Convert Firestore document to Entry object
+  private static docToEntry(doc: QueryDocumentSnapshot<DocumentData>): Entry {
+    const data = doc.data();
+    
+    // Debug logging
+    console.log('Converting Firestore doc to Entry:', {
+      docId: doc.id,
+      data: JSON.stringify(data, null, 2)
+    });
+    
+    const entry = {
+      id: doc.id,
+      title: data.title,
+      category: data.category,
+      label: data.label,
+      description: data.description,
+      color: data.color,
+      createdAt: this.timestampToISO(data.createdAt),
+      updatedAt: this.timestampToISO(data.updatedAt),
+      // Include category-specific fields without overriding base fields
+      ...Object.fromEntries(
+        Object.entries(data).filter(([key]) => 
+          !['title', 'category', 'label', 'description', 'color', 'createdAt', 'updatedAt'].includes(key)
+        )
+      )
+    } as Entry;
+    
+    console.log('Converted Entry:', JSON.stringify(entry, null, 2));
+    return entry;
+  }
+
+  // Clean data by removing undefined values and handling other Firestore restrictions
+  private static cleanData<T extends object>(data: T): T {
+    return Object.fromEntries(
+      Object.entries(data).filter(([_, v]) => {
+        // Remove undefined values
+        if (v === undefined) return false;
+        
+        // Remove null values (optional - uncomment if you want to remove nulls too)
+        // if (v === null) return false;
+        
+        // Remove empty strings (optional - uncomment if you want to remove empty strings)
+        // if (typeof v === 'string' && v.trim() === '') return false;
+        
+        return true;
+      })
+    ) as T;
+  }
+
+  // Convert Entry object to Firestore document data
+  private static entryToDocData(entry: Omit<Entry, 'id' | 'createdAt' | 'updatedAt'>): DocumentData {
+    const { id, createdAt, updatedAt, ...entryData } = entry as any;
+    const cleanedData = this.cleanData(entryData);
+    return {
+      ...cleanedData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+  }
+
+  // Get all entries for a user
+  static async getEntries(userId?: string): Promise<Entry[]> {
     try {
-      const data = await AsyncStorage.getItem(`${STORAGE_KEYS.ENTRIES}_${category}`);
-      return data ? JSON.parse(data) : [];
+      const currentUserId = userId || this.getCurrentUserId();
+      if (!currentUserId) {
+        console.warn('No user ID provided and no authenticated user');
+        return [];
+      }
+
+      const entriesRef = this.getUserEntriesCollection(currentUserId);
+      const q = query(entriesRef, orderBy('updatedAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      
+      return querySnapshot.docs.map(doc => this.docToEntry(doc));
+    } catch (error) {
+      console.error('Error getting entries:', error);
+      return [];
+    }
+  }
+
+  // Get entries by category for a user
+  static async getEntriesByCategory(category: EntryCategory, userId?: string): Promise<Entry[]> {
+    try {
+      const currentUserId = userId || this.getCurrentUserId();
+      if (!currentUserId) {
+        console.warn('No user ID provided and no authenticated user');
+        return [];
+      }
+
+      console.log(`Getting entries for category: ${category}, userId: ${currentUserId}`);
+
+      const entriesRef = this.getUserEntriesCollection(currentUserId);
+      
+      // Try with orderBy first, fallback to simple where clause if it fails
+      let querySnapshot;
+      try {
+        const q = query(
+          entriesRef, 
+          where('category', '==', category),
+          orderBy('updatedAt', 'desc')
+        );
+        querySnapshot = await getDocs(q);
+      } catch (orderByError) {
+        console.warn('OrderBy failed, trying simple query:', orderByError);
+        // Fallback to simple query without orderBy
+        const q = query(entriesRef, where('category', '==', category));
+        querySnapshot = await getDocs(q);
+      }
+      
+      console.log(`Found ${querySnapshot.docs.length} documents for category ${category}`);
+      
+      const entries = querySnapshot.docs.map(doc => this.docToEntry(doc));
+      console.log(`Converted ${entries.length} entries for category ${category}`);
+      
+      return entries;
     } catch (error) {
       console.error('Error getting entries by category:', error);
       return [];
     }
   }
 
-  // Get all entries across all categories
-  static async getAllEntries(): Promise<Entry[]> {
-    try {
-      const categories: EntryCategory[] = ['nutrition', 'supplements', 'vitamins', 'fitness', 'wellness', 'health', 'medicine'];
-      const allEntries: Entry[] = [];
-
-      for (const category of categories) {
-        const entries = await this.getEntriesByCategory(category);
-        allEntries.push(...entries);
-      }
-
-      return allEntries.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-    } catch (error) {
-      console.error('Error getting all entries:', error);
-      return [];
-    }
+  // Get all entries across all categories for a user
+  static async getAllEntries(userId?: string): Promise<Entry[]> {
+    return this.getEntries(userId);
   }
 
-  // Get entry by ID
-  static async getEntryById(id: string): Promise<Entry | null> {
+  // Get entry by ID for a user
+  static async getEntryById(entryId: string, userId?: string): Promise<Entry | null> {
     try {
-      const allEntries = await this.getAllEntries();
-      return allEntries.find(entry => entry.id === id) || null;
+      const currentUserId = userId || this.getCurrentUserId();
+      if (!currentUserId) {
+        console.warn('No user ID provided and no authenticated user');
+        return null;
+      }
+
+      const entryRef = doc(db, 'users', currentUserId, 'entries', entryId);
+      const entryDoc = await getDoc(entryRef);
+      
+      if (entryDoc.exists()) {
+        return this.docToEntry(entryDoc as QueryDocumentSnapshot<DocumentData>);
+      }
+      
+      return null;
     } catch (error) {
       console.error('Error getting entry by ID:', error);
       return null;
     }
   }
 
-  // Create a new entry
-  static async createEntry(entryData: Omit<Entry, 'id' | 'createdAt' | 'updatedAt'>): Promise<Entry> {
+  // Add a new entry for a user
+  static async addEntry(userId: string, entryData: Omit<Entry, 'id' | 'createdAt' | 'updatedAt'>): Promise<Entry> {
     try {
-      const now = new Date().toISOString();
-      const newEntry: Entry = {
-        ...entryData,
-        id: this.generateId(),
-        createdAt: now,
-        updatedAt: now,
-      } as Entry;
+      if (!this.isAuthenticated()) {
+        throw new Error('User must be authenticated to add entries');
+      }
 
-      const existingEntries = await this.getEntriesByCategory(entryData.category);
-      const updatedEntries = [...existingEntries, newEntry];
-
-      await AsyncStorage.setItem(
-        `${STORAGE_KEYS.ENTRIES}_${entryData.category}`,
-        JSON.stringify(updatedEntries)
-      );
-
-      return newEntry;
+      const entriesRef = this.getUserEntriesCollection(userId);
+      const docData = this.entryToDocData(entryData);
+      
+      // Log the cleaned data for debugging
+      console.log('Adding entry with data:', JSON.stringify(docData, null, 2));
+      
+      const docRef = await addDoc(entriesRef, docData);
+      
+      // Get the created document to return with proper timestamps
+      const createdDoc = await getDoc(docRef);
+      if (createdDoc.exists()) {
+        return this.docToEntry(createdDoc as QueryDocumentSnapshot<DocumentData>);
+      }
+      
+      throw new Error('Failed to create entry');
     } catch (error) {
-      console.error('Error creating entry:', error);
+      console.error('Error adding entry:', error);
+      console.error('Entry data that caused error:', JSON.stringify(entryData, null, 2));
       throw error;
     }
   }
 
-  // Update an existing entry
-  static async updateEntry(id: string, updates: Partial<Omit<Entry, 'id' | 'createdAt'>>): Promise<Entry | null> {
+  // Update an existing entry for a user
+  static async updateEntry(userId: string, entryId: string, updates: Partial<Omit<Entry, 'id' | 'createdAt'>>): Promise<Entry | null> {
     try {
-      const existingEntry = await this.getEntryById(id);
-      if (!existingEntry) {
-        console.warn(`Entry with id ${id} not found for update`);
+      if (!this.isAuthenticated()) {
+        throw new Error('User must be authenticated to update entries');
+      }
+
+      const entryRef = doc(db, 'users', userId, 'entries', entryId);
+      
+      // Check if entry exists
+      const entryDoc = await getDoc(entryRef);
+      if (!entryDoc.exists()) {
         throw new Error('Entry not found');
       }
 
-      const updatedEntry: Entry = {
-        ...existingEntry,
-        ...updates,
-        updatedAt: new Date().toISOString(),
-      } as Entry;
+      const cleanedUpdates = this.cleanData(updates);
+      const updateData = {
+        ...cleanedUpdates,
+        updatedAt: serverTimestamp(),
+      };
 
-      const existingEntries = await this.getEntriesByCategory(existingEntry.category);
-      const updatedEntries = existingEntries.map(entry => 
-        entry.id === id ? updatedEntry : entry
-      );
-
-      await AsyncStorage.setItem(
-        `${STORAGE_KEYS.ENTRIES}_${existingEntry.category}`,
-        JSON.stringify(updatedEntries)
-      );
-
-      return updatedEntry;
+      await updateDoc(entryRef, updateData);
+      
+      // Get the updated document
+      const updatedDoc = await getDoc(entryRef);
+      return this.docToEntry(updatedDoc as QueryDocumentSnapshot<DocumentData>);
     } catch (error) {
       console.error('Error updating entry:', error);
       throw error;
     }
   }
 
-  // Delete an entry
-  static async deleteEntry(id: string): Promise<boolean> {
+  // Delete an entry for a user
+  static async deleteEntry(userId: string, entryId: string): Promise<boolean> {
     try {
-      const existingEntry = await this.getEntryById(id);
-      if (!existingEntry) {
+      if (!this.isAuthenticated()) {
+        throw new Error('User must be authenticated to delete entries');
+      }
+
+      const entryRef = doc(db, 'users', userId, 'entries', entryId);
+      
+      // Check if entry exists
+      const entryDoc = await getDoc(entryRef);
+      if (!entryDoc.exists()) {
         throw new Error('Entry not found');
       }
 
-      const existingEntries = await this.getEntriesByCategory(existingEntry.category);
-      const updatedEntries = existingEntries.filter(entry => entry.id !== id);
-
-      await AsyncStorage.setItem(
-        `${STORAGE_KEYS.ENTRIES}_${existingEntry.category}`,
-        JSON.stringify(updatedEntries)
-      );
-
+      await deleteDoc(entryRef);
       return true;
     } catch (error) {
       console.error('Error deleting entry:', error);
-      return false;
+      throw error;
     }
   }
 
-  // Search entries by title or description
-  static async searchEntries(query: string, category?: EntryCategory): Promise<Entry[]> {
+  // Create a new entry (legacy method for backward compatibility)
+  static async createEntry(entryData: Omit<Entry, 'id' | 'createdAt' | 'updatedAt'>): Promise<Entry> {
+    const currentUserId = this.getCurrentUserId();
+    if (!currentUserId) {
+      throw new Error('User must be authenticated to create entries');
+    }
+    return this.addEntry(currentUserId, entryData);
+  }
+
+  // Search entries by title or description for a user
+  static async searchEntries(query: string, category?: EntryCategory, userId?: string): Promise<Entry[]> {
     try {
+      const currentUserId = userId || this.getCurrentUserId();
+      if (!currentUserId) {
+        console.warn('No user ID provided and no authenticated user');
+        return [];
+      }
+
       const entries = category 
-        ? await this.getEntriesByCategory(category)
-        : await this.getAllEntries();
+        ? await this.getEntriesByCategory(category, currentUserId)
+        : await this.getEntries(currentUserId);
 
       const lowercaseQuery = query.toLowerCase();
       return entries.filter(entry => 
@@ -152,13 +311,46 @@ export class EntryService {
     }
   }
 
-  // Get entries by color
-  static async getEntriesByColor(color: string): Promise<Entry[]> {
+  // Get entries by color for a user
+  static async getEntriesByColor(color: string, userId?: string): Promise<Entry[]> {
     try {
-      const allEntries = await this.getAllEntries();
-      return allEntries.filter(entry => entry.color === color);
+      const currentUserId = userId || this.getCurrentUserId();
+      if (!currentUserId) {
+        console.warn('No user ID provided and no authenticated user');
+        return [];
+      }
+
+      const entriesRef = this.getUserEntriesCollection(currentUserId);
+      const q = query(
+        entriesRef, 
+        where('color', '==', color),
+        orderBy('updatedAt', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      
+      return querySnapshot.docs.map(doc => this.docToEntry(doc));
     } catch (error) {
       console.error('Error getting entries by color:', error);
+      return [];
+    }
+  }
+
+  // Get recent entries for a user
+  static async getRecentEntries(limitCount: number = 10, userId?: string): Promise<Entry[]> {
+    try {
+      const currentUserId = userId || this.getCurrentUserId();
+      if (!currentUserId) {
+        console.warn('No user ID provided and no authenticated user');
+        return [];
+      }
+
+      const entriesRef = this.getUserEntriesCollection(currentUserId);
+      const q = query(entriesRef, orderBy('updatedAt', 'desc'), limit(limitCount));
+      const querySnapshot = await getDocs(q);
+      
+      return querySnapshot.docs.map(doc => this.docToEntry(doc));
+    } catch (error) {
+      console.error('Error getting recent entries:', error);
       return [];
     }
   }
@@ -203,30 +395,32 @@ export class EntryService {
     };
   }
 
-  // Clear all entries (for testing/reset purposes)
-  static async clearAllEntries(): Promise<boolean> {
-    try {
-      const categories: EntryCategory[] = ['nutrition', 'supplements', 'vitamins', 'fitness', 'wellness', 'health', 'medicine'];
-      
-      for (const category of categories) {
-        await AsyncStorage.removeItem(`${STORAGE_KEYS.ENTRIES}_${category}`);
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Error clearing all entries:', error);
-      return false;
-    }
-  }
-
-  // Get statistics for entries
-  static async getEntryStats(): Promise<{
+  // Get statistics for entries for a user
+  static async getEntryStats(userId?: string): Promise<{
     totalEntries: number;
     entriesByCategory: Record<EntryCategory, number>;
     recentEntries: Entry[];
   }> {
     try {
-      const allEntries = await this.getAllEntries();
+      const currentUserId = userId || this.getCurrentUserId();
+      if (!currentUserId) {
+        console.warn('No user ID provided and no authenticated user');
+        return {
+          totalEntries: 0,
+          entriesByCategory: {
+            nutrition: 0,
+            supplements: 0,
+            vitamins: 0,
+            fitness: 0,
+            wellness: 0,
+            health: 0,
+            medicine: 0,
+          },
+          recentEntries: [],
+        };
+      }
+
+      const allEntries = await this.getEntries(currentUserId);
       const entriesByCategory: Record<EntryCategory, number> = {
         nutrition: 0,
         supplements: 0,
@@ -241,7 +435,7 @@ export class EntryService {
         entriesByCategory[entry.category]++;
       });
 
-      const recentEntries = allEntries.slice(0, 10);
+      const recentEntries = await this.getRecentEntries(10, currentUserId);
 
       return {
         totalEntries: allEntries.length,
@@ -263,6 +457,57 @@ export class EntryService {
         },
         recentEntries: [],
       };
+    }
+  }
+
+  // Clear all entries for a user (for testing/reset purposes)
+  static async clearAllEntries(userId?: string): Promise<boolean> {
+    try {
+      const currentUserId = userId || this.getCurrentUserId();
+      if (!currentUserId) {
+        throw new Error('No user ID provided and no authenticated user');
+      }
+
+      const entries = await this.getEntries(currentUserId);
+      const deletePromises = entries.map(entry => 
+        this.deleteEntry(currentUserId, entry.id)
+      );
+      
+      await Promise.all(deletePromises);
+      return true;
+    } catch (error) {
+      console.error('Error clearing all entries:', error);
+      return false;
+    }
+  }
+
+  // Debug method to test data retrieval
+  static async debugGetAllEntries(userId?: string): Promise<void> {
+    try {
+      const currentUserId = userId || this.getCurrentUserId();
+      if (!currentUserId) {
+        console.warn('No user ID provided and no authenticated user');
+        return;
+      }
+
+      console.log('=== DEBUG: Getting all entries ===');
+      console.log('User ID:', currentUserId);
+
+      const entriesRef = this.getUserEntriesCollection(currentUserId);
+      const querySnapshot = await getDocs(entriesRef);
+      
+      console.log(`Total documents found: ${querySnapshot.docs.length}`);
+      
+      querySnapshot.docs.forEach((doc, index) => {
+        console.log(`Document ${index + 1}:`, {
+          id: doc.id,
+          data: doc.data()
+        });
+      });
+      
+      console.log('=== END DEBUG ===');
+    } catch (error) {
+      console.error('Debug error:', error);
     }
   }
 }

@@ -19,6 +19,7 @@ import { ColorPicker } from '../components/forms';
 import { FormInput, FormPicker, FormButton } from '../components/forms';
 import DebugOverlay from '../components/DebugOverlay';
 import UserService from '../services/UserService';
+import { auth } from '../../firebase';
 
 interface AddEditEntryScreenProps {
   navigation?: any;
@@ -238,8 +239,13 @@ const AddEditEntryScreen: React.FC<AddEditEntryScreenProps> = (props) => {
           throw new Error('Invalid category');
       }
 
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        throw new Error('User must be authenticated to save entries');
+      }
+
       if (isEditing && entry) {
-        await EntryService.updateEntry(entry.id, entryData);
+        await EntryService.updateEntry(userId, entry.id, entryData);
       } else {
         await EntryService.createEntry(entryData);
       }

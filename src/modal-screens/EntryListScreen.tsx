@@ -18,6 +18,7 @@ import EntryService from '../services/EntryService';
 import ConfirmationModal from '../components/ConfirmationModal';
 import DebugOverlay from '../components/DebugOverlay';
 import { shadows } from '../styles/styleGuide';
+import { auth } from '../../firebase';
 
 interface EntryListScreenProps {
   navigation: any;
@@ -116,7 +117,11 @@ const EntryListScreen: React.FC<EntryListScreenProps> = ({ navigation, route }) 
   const confirmDelete = async () => {
     if (entryToDelete) {
       try {
-        await EntryService.deleteEntry(entryToDelete.id);
+        const userId = auth.currentUser?.uid;
+        if (!userId) {
+          throw new Error('User must be authenticated to delete entries');
+        }
+        await EntryService.deleteEntry(userId, entryToDelete.id);
         await loadEntries();
         setDeleteModalVisible(false);
         setEntryToDelete(null);

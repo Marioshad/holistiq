@@ -14,6 +14,7 @@ import ScheduleRecordBottomSheet from '../../components/ScheduleRecordBottomShee
 import EntryEditDrawer from '../../components/EntryEditDrawer';
 import DebugOverlay from '../../components/DebugOverlay';
 import TimeBasedGreeting from '../../components/ui/TimeBasedGreeting';
+import { auth } from '../../../firebase';
 import {
   colors,
   typography,
@@ -122,16 +123,22 @@ const DailyScreen: React.FC = () => {
 
   const loadScheduledActivities = async (date: string) => {
     try {
-      const activities = await ScheduleService.getActivitiesForDate(date);
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        console.warn('No authenticated user found');
+        return;
+      }
+
+      const activities = await ScheduleService.getActivitiesForDate(date, userId);
       setScheduledActivities(activities);
       
       // Load entry details for each activity
       const entryIds = activities.map(a => a.entryId);
       const newEntriesMap = new Map();
-      
+
       for (const entryId of entryIds) {
         try {
-          const entry = await EntryService.getEntryById(entryId);
+          const entry = await EntryService.getEntryById(entryId, userId);
           if (entry) {
             newEntriesMap.set(entryId, entry);
           }
@@ -325,10 +332,16 @@ const DailyScreen: React.FC = () => {
     const activity = scheduledActivities.find(a => a.id === taskId);
     if (activity) {
       try {
+        const userId = auth.currentUser?.uid;
+        if (!userId) {
+          Alert.alert('Error', 'User must be authenticated');
+          return;
+        }
+
         if (activity.completed) {
-          await ScheduleService.uncompleteActivity(taskId);
+          await ScheduleService.uncompleteActivity(userId, taskId);
         } else {
-          await ScheduleService.completeActivity(taskId);
+          await ScheduleService.completeActivity(userId, taskId);
         }
         loadScheduledActivities(selectedDate);
       } catch (error) {
@@ -353,8 +366,14 @@ const DailyScreen: React.FC = () => {
     const activity = scheduledActivities.find(a => a.id === task.id);
     if (activity) {
       try {
+        const userId = auth.currentUser?.uid;
+        if (!userId) {
+          Alert.alert('Error', 'User must be authenticated');
+          return;
+        }
+
         // For scheduled activities, fetch the entry and open edit drawer
-        const entry = await EntryService.getEntryById(activity.entryId);
+        const entry = await EntryService.getEntryById(activity.entryId, userId);
         if (entry) {
           setSelectedEntry(entry);
           setSelectedActivityId(activity.id);

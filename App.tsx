@@ -40,6 +40,7 @@ import ProfileScreen from './src/main-app/drawer/ProfileScreen';
 import AboutScreen from './src/main-app/drawer/AboutScreen';
 import FormComponentsScreen from './src/development-tools/FormComponentsScreen';
 import StyleGuideScreen from './src/development-tools/StyleGuideScreen';
+import AuthDebugScreen from './src/debug/AuthDebugScreen';
 
 // Components
 import DrawerContent from './src/components/DrawerContent';
@@ -273,6 +274,16 @@ function DrawerNavigator({ onLogout }: { onLogout: () => void }) {
           title: 'Style Guide',
           drawerIcon: ({ color, size }) => (
             <MaterialIcons name="palette" color={color} size={size} />
+          ),
+        }}
+      />
+      <Drawer.Screen 
+        name="AuthDebug" 
+        component={AuthDebugScreen} 
+        options={{ 
+          title: 'Firebase Debug',
+          drawerIcon: ({ color, size }) => (
+            <MaterialIcons name="bug-report" color={color} size={size} />
           ),
         }}
       />

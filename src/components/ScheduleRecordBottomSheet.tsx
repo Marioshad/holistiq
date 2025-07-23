@@ -33,6 +33,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AddEditEntryScreen from '../modal-screens/AddEditEntryScreen';
 import { Platform } from 'react-native';
 import UserService from '../services/UserService';
+import { auth } from '../../firebase';
 
 const { width } = Dimensions.get('window');
 
@@ -252,7 +253,14 @@ const ScheduleRecordBottomSheet: React.FC<ScheduleRecordBottomSheetProps> = ({
   const loadEntriesForCategory = async (category: EntryCategory) => {
     setIsLoading(true);
     try {
-      const categoryEntries = await EntryService.getEntriesByCategory(category);
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        console.warn('No authenticated user found');
+        setEntries([]);
+        return;
+      }
+      
+      const categoryEntries = await EntryService.getEntriesByCategory(category, userId);
       setEntries(categoryEntries);
     } catch (error) {
       console.error('Error loading entries:', error);
@@ -343,8 +351,14 @@ const ScheduleRecordBottomSheet: React.FC<ScheduleRecordBottomSheetProps> = ({
         currentDate.setDate(currentDate.getDate() + 1);
       }
 
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        throw new Error('User must be authenticated to schedule activities');
+      }
+
       for (const date of dates) {
         await ScheduleService.scheduleActivity(
+          userId,
           scheduleData.selectedEntry.id,
           date,
           date,

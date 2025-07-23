@@ -18,6 +18,7 @@ import { FormInput, FormButton } from '../components/forms';
 import DebugOverlay from './DebugOverlay';
 import { Entry, ScheduledActivity } from '../types';
 import EntryService from '../services/EntryService';
+import { auth } from '../../firebase';
 
 interface EntryEditDrawerProps {
   isVisible: boolean;
@@ -165,8 +166,13 @@ const EntryEditDrawer: React.FC<EntryEditDrawerProps> = ({
 
     setIsLoading(true);
     try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        throw new Error('User must be authenticated to save entries');
+      }
+
       // Check if entry exists in storage first
-      const existingEntry = await EntryService.getEntryById(entry.id);
+      const existingEntry = await EntryService.getEntryById(entry.id, userId);
       
       if (existingEntry) {
         // Update existing entry
@@ -174,10 +180,9 @@ const EntryEditDrawer: React.FC<EntryEditDrawerProps> = ({
           title: title.trim(),
           label: label.trim(),
           description: description.trim(),
-          updatedAt: new Date().toISOString(),
         };
 
-        await EntryService.updateEntry(entry.id, updates);
+        await EntryService.updateEntry(userId, entry.id, updates);
         Alert.alert('Success', 'Entry updated successfully');
       } else {
         // Create new entry (for legacy tasks that don't exist in storage)

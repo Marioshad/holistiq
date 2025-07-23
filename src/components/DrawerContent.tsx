@@ -146,6 +146,15 @@ const DrawerContent: React.FC<DrawerContentProps> = ({ navigation, onLogout, ...
               onPress={() => navigation.navigate('StyleGuide')}
               focused={props.state.index === 6}
             />
+
+            <DrawerItem
+              icon={({ color, size }) => (
+                <MaterialIcons name="bug-report" color={color} size={size} />
+              )}
+              label="Firebase Debug"
+              onPress={() => navigation.navigate('AuthDebug')}
+              focused={props.state.index === 7}
+            />
           </Drawer.Section>
 
           <Divider />

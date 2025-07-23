@@ -19,6 +19,7 @@ import DebugOverlay from '../components/DebugOverlay';
 import { Entry, ScheduledActivity } from '../types';
 import EntryService from '../services/EntryService';
 import { shadows } from '../styles/styleGuide';
+import { auth } from '../../firebase';
 // import ScheduleService from '../services/ScheduleService';
 
 interface EntryDetailsScreenProps {
@@ -148,8 +149,13 @@ const EntryDetailsScreen: React.FC<EntryDetailsScreenProps> = ({ navigation, rou
 
     setIsLoading(true);
     try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        throw new Error('User must be authenticated to save entries');
+      }
+
       // Check if entry exists in storage first
-      const existingEntry = await EntryService.getEntryById(entry.id);
+      const existingEntry = await EntryService.getEntryById(entry.id, userId);
       
       if (existingEntry) {
         // Update existing entry
@@ -157,10 +163,9 @@ const EntryDetailsScreen: React.FC<EntryDetailsScreenProps> = ({ navigation, rou
           title: title.trim(),
           label: label.trim(),
           description: description.trim(),
-          updatedAt: new Date().toISOString(),
         };
 
-        await EntryService.updateEntry(entry.id, updates);
+        await EntryService.updateEntry(userId, entry.id, updates);
         Alert.alert('Success', 'Entry updated successfully');
       } else {
         // Create new entry (for legacy tasks that don't exist in storage)
