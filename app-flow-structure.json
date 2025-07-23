@@ -1,0 +1,508 @@
+{
+  "appName": "Healthyr - Health Tracking App",
+  "version": "1.0.0",
+  "description": "Comprehensive health tracking application with daily, monthly, and analytics features",
+  "primaryColor": "rgb(196, 154, 255)",
+  "architecture": {
+    "framework": "React Native with Expo",
+    "navigation": "React Navigation (Stack, Tab, Drawer)",
+    "stateManagement": "React Hooks + AsyncStorage",
+    "uiLibrary": "React Native Paper + MaterialIcons",
+    "styling": "StyleSheet with centralized design system"
+  },
+  "appFlow": {
+    "entryPoint": "App.tsx",
+    "initialFlow": [
+      "OnboardingScreen (if first time)",
+      "LoginScreen/RegisterScreen",
+      "MainApp (if authenticated)"
+    ],
+    "authenticationFlow": {
+      "login": "LoginScreen → MainApp",
+      "register": "RegisterScreen → MainApp",
+      "logout": "MainApp → LoginScreen"
+    }
+  },
+  "screens": {
+    "onboarding": {
+      "name": "OnboardingScreen",
+      "file": "src/onboarding/OnboardingScreen.tsx",
+      "type": "Stack Screen",
+      "purpose": "First-time user introduction",
+      "components": [
+        "LinearGradient header",
+        "Swipeable carousel",
+        "Feature highlights",
+        "Get Started button"
+      ],
+      "navigation": {
+        "onComplete": "MainApp"
+      }
+    },
+    "authentication": {
+      "login": {
+        "name": "LoginScreen",
+        "file": "src/authentication/LoginScreen.tsx",
+        "type": "Auth Screen",
+        "purpose": "User login",
+        "components": [
+          "Logo and branding",
+          "Email input field",
+          "Password input field",
+          "Login button",
+          "Forgot password link",
+          "Register link"
+        ],
+        "navigation": {
+          "onSuccess": "MainApp",
+          "onRegister": "RegisterScreen"
+        }
+      },
+      "register": {
+        "name": "RegisterScreen",
+        "file": "src/authentication/RegisterScreen.tsx",
+        "type": "Auth Screen",
+        "purpose": "User registration",
+        "components": [
+          "Logo and branding",
+          "Name input field",
+          "Email input field",
+          "Password input field",
+          "Confirm password field",
+          "Register button",
+          "Login link"
+        ],
+        "navigation": {
+          "onSuccess": "MainApp",
+          "onLogin": "LoginScreen"
+        }
+      }
+    },
+    "mainApp": {
+      "structure": "DrawerNavigator → MainTabs",
+      "drawerScreens": {
+        "home": {
+          "name": "MainTabs",
+          "type": "Tab Navigator",
+          "tabs": [
+            "Daily",
+            "Monthly", 
+            "Analytics",
+            "Notifications"
+          ]
+        },
+        "settings": {
+          "name": "SettingsScreen",
+          "file": "src/main-app/drawer/SettingsScreen.tsx",
+          "type": "Drawer Screen",
+          "purpose": "App settings and preferences",
+          "components": [
+            "User preferences",
+            "Notification settings",
+            "Theme settings",
+            "Data management",
+            "Logout button"
+          ]
+        },
+        "profile": {
+          "name": "ProfileScreen",
+          "file": "src/main-app/drawer/ProfileScreen.tsx",
+          "type": "Drawer Screen",
+          "purpose": "User profile management",
+          "components": [
+            "Profile picture",
+            "User information",
+            "Edit profile options",
+            "Account settings"
+          ]
+        },
+        "about": {
+          "name": "AboutScreen",
+          "file": "src/main-app/drawer/AboutScreen.tsx",
+          "type": "Drawer Screen",
+          "purpose": "App information and credits",
+          "components": [
+            "App version",
+            "Developer information",
+            "Terms of service",
+            "Privacy policy"
+          ]
+        },
+        "entryManagement": {
+          "name": "EntryManagementScreen",
+          "file": "src/main-app/drawer/EntryManagementScreen.tsx",
+          "type": "Drawer Screen",
+          "purpose": "Manage health entries",
+          "components": [
+            "Category selection",
+            "Entry list",
+            "Add new entry button",
+            "Search and filter"
+          ],
+          "navigation": {
+            "onCategorySelect": "EntryListScreen",
+            "onAddEntry": "AddEditEntryScreen"
+          }
+        },
+        "development": {
+          "formComponents": {
+            "name": "FormComponentsScreen",
+            "file": "src/development-tools/FormComponentsScreen.tsx",
+            "type": "Development Screen",
+            "purpose": "Showcase reusable form components with style guide compliance",
+            "components": [
+              "FormInput examples (text, email, password, search, multiline, error states)",
+              "FormPicker examples (category, size, disabled states)",
+              "FormButton examples (all variants, sizes, icon positions, loading states)",
+              "DateTimePicker examples (date and time selection)",
+              "ColorPicker example (color selection)",
+              "Usage examples and component props documentation"
+            ],
+            "features": [
+              "Strictly reusable components only",
+              "Style guide compliance",
+              "Component prop documentation",
+              "Usage examples",
+              "Interactive demonstrations"
+            ]
+          },
+          "styleGuide": {
+            "name": "StyleGuideScreen",
+            "file": "src/development-tools/StyleGuideScreen.tsx",
+            "type": "Development Screen",
+            "purpose": "Design system showcase",
+            "components": [
+              "Color palette",
+              "Typography examples",
+              "Button variants",
+              "Card examples",
+              "Icon styles",
+              "Spacing scale",
+              "Usage guidelines"
+            ]
+          }
+        }
+      },
+      "tabScreens": {
+        "daily": {
+          "name": "DailyScreen",
+          "file": "src/main-app/tabs/DailyScreen.tsx",
+          "type": "Tab Screen",
+          "purpose": "Daily health tracking",
+          "components": [
+            "Date header",
+            "Progress summary",
+            "Habit categories",
+            "Quick add buttons",
+            "Today's schedule"
+          ],
+          "navigation": {
+            "onHabitPress": "HabitDetailScreen",
+            "onAddEntry": "AddEditEntryScreen"
+          }
+        },
+        "monthly": {
+          "name": "MonthlyScreen",
+          "file": "src/main-app/tabs/MonthlyScreen.tsx",
+          "type": "Tab Screen",
+          "purpose": "Monthly overview and planning",
+          "components": [
+            "Calendar view",
+            "Monthly goals",
+            "Progress charts",
+            "Notes section"
+          ],
+          "navigation": {
+            "onDatePress": "MonthlyDetailScreen"
+          }
+        },
+        "analytics": {
+          "name": "AnalyticsScreen",
+          "file": "src/main-app/tabs/AnalyticsScreen.tsx",
+          "type": "Tab Screen",
+          "purpose": "Health data analytics",
+          "components": [
+            "Progress charts",
+            "Trend analysis",
+            "Goal tracking",
+            "Insights"
+          ]
+        },
+        "notifications": {
+          "name": "NotificationsScreen",
+          "file": "src/main-app/tabs/NotificationsScreen.tsx",
+          "type": "Tab Screen",
+          "purpose": "Reminders and notifications",
+          "components": [
+            "Reminder list",
+            "Add reminder",
+            "Notification settings"
+          ]
+        }
+      }
+    },
+    "modalScreens": {
+      "habitDetail": {
+        "name": "HabitDetailScreen",
+        "file": "src/modal-screens/HabitDetailScreen.tsx",
+        "type": "Modal Screen",
+        "purpose": "Detailed habit view",
+        "components": [
+          "Habit information",
+          "Progress tracking",
+          "History",
+          "Edit options"
+        ]
+      },
+      "monthlyDetail": {
+        "name": "MonthlyDetailScreen",
+        "file": "src/modal-screens/MonthlyDetailScreen.tsx",
+        "type": "Modal Screen",
+        "purpose": "Daily detail view",
+        "components": [
+          "Daily summary",
+          "Completed items",
+          "Notes",
+          "Goals"
+        ]
+      },
+      "entryList": {
+        "name": "EntryListScreen",
+        "file": "src/modal-screens/EntryListScreen.tsx",
+        "type": "Modal Screen",
+        "purpose": "List entries by category",
+        "components": [
+          "Category header",
+          "Entry list",
+          "Search bar",
+          "Add entry button"
+        ],
+        "navigation": {
+          "onEntryPress": "EntryDetailsScreen",
+          "onAddEntry": "AddEditEntryScreen"
+        }
+      },
+      "addEditEntry": {
+        "name": "AddEditEntryScreen",
+        "file": "src/modal-screens/AddEditEntryScreen.tsx",
+        "type": "Modal Screen",
+        "purpose": "Create or edit health entries",
+        "components": [
+          "Category selection",
+          "Form fields",
+          "Date/time pickers",
+          "Save/Cancel buttons"
+        ]
+      },
+      "entryDetails": {
+        "name": "EntryDetailsScreen",
+        "file": "src/modal-screens/EntryDetailsScreen.tsx",
+        "type": "Modal Screen",
+        "purpose": "View entry details",
+        "components": [
+          "Entry information",
+          "Edit button",
+          "Delete button",
+          "History"
+        ],
+        "navigation": {
+          "onEdit": "AddEditEntryScreen"
+        }
+      }
+    }
+  },
+  "components": {
+    "navigation": {
+      "drawerContent": {
+        "name": "DrawerContent",
+        "file": "src/components/DrawerContent.tsx",
+        "purpose": "Custom drawer navigation content",
+        "sections": [
+          "User info",
+          "Main navigation",
+          "Development tools",
+          "Quick actions",
+          "Logout"
+        ]
+      }
+    },
+    "forms": {
+      "formInput": {
+        "name": "FormInput",
+        "file": "src/components/forms/FormInput.tsx",
+        "purpose": "Reusable input component",
+        "props": [
+          "label",
+          "value",
+          "onChangeText",
+          "placeholder",
+          "error",
+          "type"
+        ]
+      },
+      "formPicker": {
+        "name": "FormPicker",
+        "file": "src/components/forms/FormPicker.tsx",
+        "purpose": "Reusable picker component",
+        "props": [
+          "label",
+          "value",
+          "onValueChange",
+          "items",
+          "placeholder"
+        ]
+      },
+      "formButton": {
+        "name": "FormButton",
+        "file": "src/components/forms/FormButton.tsx",
+        "purpose": "Reusable button component",
+        "variants": [
+          "primary",
+          "secondary",
+          "outline",
+          "danger"
+        ]
+      },
+      "dateTimePicker": {
+        "name": "DateTimePicker",
+        "file": "src/components/forms/DateTimePicker.tsx",
+        "purpose": "Date and time selection",
+        "features": [
+          "Date picker",
+          "Time picker",
+          "Custom modal",
+          "Platform specific"
+        ]
+      },
+      "colorPicker": {
+        "name": "ColorPicker",
+        "file": "src/components/forms/ColorPicker.tsx",
+        "purpose": "Color selection component",
+        "features": [
+          "Color grid",
+          "Custom colors",
+          "Selection indicator"
+        ]
+      }
+    },
+    "ui": {
+      "debugOverlay": {
+        "name": "DebugOverlay",
+        "file": "src/components/DebugOverlay.tsx",
+        "purpose": "Development debugging tool"
+      }
+    }
+  },
+  "services": {
+    "userService": {
+      "name": "UserService",
+      "file": "src/services/UserService.ts",
+      "purpose": "User authentication and management",
+      "methods": [
+        "login",
+        "register",
+        "logout",
+        "getCurrentUser",
+        "isLoggedIn"
+      ]
+    }
+  },
+  "styles": {
+    "styleGuide": {
+      "name": "styleGuide",
+      "file": "src/styles/styleGuide.ts",
+      "purpose": "Centralized design system",
+      "tokens": [
+        "colors",
+        "typography",
+        "spacing",
+        "borderRadius",
+        "shadows"
+      ],
+      "preBuiltStyles": [
+        "buttonStyles",
+        "cardStyles",
+        "inputStyles",
+        "textStyles",
+        "iconStyles",
+        "tagStyles"
+      ]
+    },
+    "componentTemplate": {
+      "name": "componentTemplate",
+      "file": "src/styles/componentTemplate.tsx",
+      "purpose": "Template for new components"
+    },
+    "documentation": {
+      "name": "README",
+      "file": "src/styles/README.md",
+      "purpose": "Style guide documentation"
+    }
+  },
+  "types": {
+    "mainFile": "src/types/index.ts",
+    "definitions": [
+      "HabitData",
+      "MealPlan",
+      "Supplement",
+      "Exercise",
+      "Stretching",
+      "Entry types",
+      "ScheduledActivity",
+      "UserProfile",
+      "Navigation types"
+    ]
+  },
+  "navigationFlow": {
+    "authentication": {
+      "onboarding": "OnboardingScreen → MainApp",
+      "login": "LoginScreen → MainApp",
+      "register": "RegisterScreen → MainApp",
+      "logout": "Any Screen → LoginScreen"
+    },
+    "mainApp": {
+      "drawerNavigation": {
+        "home": "MainTabs (Daily, Monthly, Analytics, Notifications)",
+        "settings": "SettingsScreen",
+        "profile": "ProfileScreen",
+        "about": "AboutScreen",
+        "entryManagement": "EntryManagementScreen → EntryListScreen",
+        "development": {
+          "formComponents": "FormComponentsScreen",
+          "styleGuide": "StyleGuideScreen"
+        }
+      },
+      "tabNavigation": {
+        "daily": "DailyScreen",
+        "monthly": "MonthlyScreen",
+        "analytics": "AnalyticsScreen",
+        "notifications": "NotificationsScreen"
+      }
+    },
+    "modalNavigation": {
+      "habitDetail": "Any Screen → HabitDetailScreen",
+      "monthlyDetail": "MonthlyScreen → MonthlyDetailScreen",
+      "entryList": "EntryManagementScreen → EntryListScreen",
+      "addEditEntry": "Multiple Screens → AddEditEntryScreen",
+      "entryDetails": "EntryListScreen → EntryDetailsScreen"
+    }
+  },
+  "dataFlow": {
+    "userData": {
+      "authentication": "UserService → AsyncStorage",
+      "profile": "UserService → AsyncStorage",
+      "preferences": "SettingsScreen → AsyncStorage"
+    },
+    "healthData": {
+      "dailyHabits": "DailyScreen → AsyncStorage",
+      "monthlyNotes": "MonthlyScreen → AsyncStorage",
+      "entries": "Entry Screens → AsyncStorage",
+      "scheduledActivities": "Entry Screens → AsyncStorage"
+    }
+  },
+  "developmentTools": {
+    "debugOverlay": "Shows current screen and component info",
+    "formComponents": "Interactive form component showcase",
+    "styleGuide": "Design system reference and template"
+  }
+} 
