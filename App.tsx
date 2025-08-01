@@ -6,13 +6,17 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { Provider as PaperProvider, DefaultTheme } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { RootStackParamList, MainTabParamList, DrawerParamList } from './src/types';
 import UserService from './src/services/UserService';
+import NotificationService from './src/services/NotificationService';
 import { ToastProvider } from './src/contexts/ToastContext';
 import { shadows } from './src/styles/styleGuide';
+
+// Environment variables
+import { ENABLE_DEV_SCREENS } from '@env';
 
 // Auth Screens
 import OnboardingScreen from './src/onboarding/OnboardingScreen';
@@ -38,9 +42,31 @@ import EntryDetailsScreen from './src/modal-screens/EntryDetailsScreen';
 import SettingsScreen from './src/main-app/drawer/SettingsScreen';
 import ProfileScreen from './src/main-app/drawer/ProfileScreen';
 import AboutScreen from './src/main-app/drawer/AboutScreen';
-import FormComponentsScreen from './src/development-tools/FormComponentsScreen';
-import StyleGuideScreen from './src/development-tools/StyleGuideScreen';
-import AuthDebugScreen from './src/debug/AuthDebugScreen';
+
+// Development Screens (conditionally imported)
+let AuthDebugScreen: any = null;
+let NotificationTestScreen: any = null;
+
+// Fallback component for when dev screens are disabled
+const DevScreenFallback = () => (
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <Text style={{ fontSize: 18, textAlign: 'center', color: '#666' }}>
+      Development screens are disabled in production mode.
+    </Text>
+    <Text style={{ fontSize: 14, textAlign: 'center', color: '#999', marginTop: 10 }}>
+      Set ENABLE_DEV_SCREENS=true in your .env file to enable development tools.
+    </Text>
+  </View>
+);
+
+if (ENABLE_DEV_SCREENS === 'true') {
+  AuthDebugScreen = require('./src/debug/AuthDebugScreen').default;
+  NotificationTestScreen = require('./src/debug/NotificationTestScreen').default;
+} else {
+  // Use fallback components when dev screens are disabled
+  AuthDebugScreen = DevScreenFallback;
+  NotificationTestScreen = DevScreenFallback;
+}
 
 // Components
 import DrawerContent from './src/components/DrawerContent';
@@ -256,27 +282,8 @@ function DrawerNavigator({ onLogout }: { onLogout: () => void }) {
         }}
       />
       
-      {/* Development Only */}
-      <Drawer.Screen 
-        name="FormComponents" 
-        component={FormComponentsScreen} 
-        options={{ 
-          title: 'Form Components',
-          drawerIcon: ({ color, size }) => (
-            <MaterialIcons name="build" color={color} size={size} />
-          ),
-        }}
-      />
-      <Drawer.Screen 
-        name="StyleGuide" 
-        component={StyleGuideScreen} 
-        options={{ 
-          title: 'Style Guide',
-          drawerIcon: ({ color, size }) => (
-            <MaterialIcons name="palette" color={color} size={size} />
-          ),
-        }}
-      />
+      {/* Development Screens - Always registered but conditionally shown */}
+
       <Drawer.Screen 
         name="AuthDebug" 
         component={AuthDebugScreen} 
@@ -284,6 +291,16 @@ function DrawerNavigator({ onLogout }: { onLogout: () => void }) {
           title: 'Firebase Debug',
           drawerIcon: ({ color, size }) => (
             <MaterialIcons name="bug-report" color={color} size={size} />
+          ),
+        }}
+      />
+      <Drawer.Screen 
+        name="NotificationTest" 
+        component={NotificationTestScreen} 
+        options={{ 
+          title: 'Notification Test',
+          drawerIcon: ({ color, size }) => (
+            <MaterialIcons name="notifications-active" color={color} size={size} />
           ),
         }}
       />
@@ -297,11 +314,37 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [authScreen, setAuthScreen] = useState<'login' | 'register'>('login');
   const [showEmailVerification, setShowEmailVerification] = useState(false);
+  const [initialNavigationState, setInitialNavigationState] = useState(undefined);
+  const [authInitialized, setAuthInitialized] = useState(false);
 
   useEffect(() => {
-    checkAppState();
-    initializeFirebaseAuth();
+    const initializeApp = async () => {
+      await checkAppState();
+      await initializeFirebaseAuth();
+      await loadNavigationState();
+    };
+    
+    initializeApp();
   }, []);
+
+  const loadNavigationState = async () => {
+    try {
+      const savedState = await AsyncStorage.getItem('NAVIGATION_STATE');
+      if (savedState) {
+        setInitialNavigationState(JSON.parse(savedState));
+      }
+    } catch (error) {
+      console.warn('Failed to load navigation state:', error);
+    }
+  };
+
+  const saveNavigationState = async (state: any) => {
+    try {
+      await AsyncStorage.setItem('NAVIGATION_STATE', JSON.stringify(state));
+    } catch (error) {
+      console.warn('Failed to save navigation state:', error);
+    }
+  };
 
   const checkAppState = async () => {
     try {
@@ -316,13 +359,48 @@ export default function App() {
     }
   };
 
-  const initializeFirebaseAuth = () => {
+  const initializeFirebaseAuth = async () => {
+    // Check for saved authentication state first
+    const savedUser = await UserService.checkSavedAuthState();
+    if (savedUser) {
+      setIsLoggedIn(true);
+      setAuthInitialized(true);
+      
+      // Initialize notification service when user is authenticated
+      NotificationService.initialize().catch(error => {
+        console.warn('Failed to initialize notification service:', error);
+      });
+      
+      if (__DEV__) {
+        console.log('App: Restored auth state on app start:', {
+          userId: savedUser.id,
+          email: savedUser.email,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+    
     // Initialize Firebase Auth state listener
     UserService.initializeAuthStateListener();
     
     // Subscribe to auth state changes
     const unsubscribe = UserService.onAuthStateChanged((user) => {
+      if (__DEV__) {
+        console.log('App: Firebase Auth state changed:', { 
+          user: user ? { id: user.id, email: user.email } : null,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
       setIsLoggedIn(user !== null);
+      setAuthInitialized(true);
+      
+      // Initialize notification service when user is authenticated
+      if (user) {
+        NotificationService.initialize().catch(error => {
+          console.warn('Failed to initialize notification service:', error);
+        });
+      }
     });
 
     // Cleanup subscription on unmount
@@ -356,13 +434,27 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await UserService.logout();
+      // Clear navigation state on logout
+      await AsyncStorage.removeItem('NAVIGATION_STATE');
       // Auth state will be automatically updated by Firebase Auth listener
     } catch (error) {
       console.error('Error during logout:', error);
     }
   };
 
-  if (isLoading) {
+  // Development-only: Debug auth state
+  useEffect(() => {
+    if (__DEV__) {
+      console.log('App: Auth state changed:', { 
+        isLoggedIn, 
+        authInitialized, 
+        hasSeenOnboarding,
+        isLoading 
+      });
+    }
+  }, [isLoggedIn, authInitialized, hasSeenOnboarding, isLoading]);
+
+  if (isLoading || !authInitialized) {
     return (
       <View style={styles.loadingContainer}>
         {/* You can add a loading spinner here */}
@@ -373,7 +465,10 @@ export default function App() {
   return (
     <PaperProvider theme={theme}>
       <ToastProvider>
-        <NavigationContainer>
+        <NavigationContainer
+          initialState={initialNavigationState}
+          onStateChange={saveNavigationState}
+        >
           <StatusBar style="dark" backgroundColor="#F7F8FD" />
           {!hasSeenOnboarding ? (
             <Stack.Navigator>

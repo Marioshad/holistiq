@@ -87,7 +87,7 @@ const FormInput: React.FC<FormInputProps> = ({
         <View style={{ borderRadius: 12 }}>
           <TextInput
             {...textInputProps}
-            style={[styles.input, inputStyle, { backgroundColor: 'transparent' }]}
+            style={[styles.input, inputStyle, { backgroundColor: 'transparent', minHeight: 32 }]}
             value={value}
             onChangeText={textInputProps.onChangeText}
             placeholder={textInputProps.placeholder}
@@ -144,6 +144,11 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     ...inputStyles.base,
+  },
+  input: {
+    fontSize: typography.base,
+    color: colors.text,
+    paddingVertical: 0, // Remove default padding to let container handle it
   },
   inputValid: {
     borderColor: colors.success + '40', // Soft green with 40% opacity

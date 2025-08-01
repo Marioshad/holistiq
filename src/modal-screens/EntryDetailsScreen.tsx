@@ -282,6 +282,7 @@ const EntryDetailsScreen: React.FC<EntryDetailsScreenProps> = ({ navigation, rou
                 onPress={handleSave}
                 disabled={isLoading}
               >
+                <MaterialIcons name="save" size={16} color="#FFFFFF" />
                 <Text style={styles.saveButtonText}>Save</Text>
               </TouchableOpacity>
             </View>
@@ -491,11 +492,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   saveButton: {
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    ...shadows.sm, // Use style guide shadow instead of custom platform logic
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgb(138, 101, 243)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 8,
+    gap: 8,
+    ...shadows.md,
   },
   saveButtonDisabled: {
     backgroundColor: '#9CA3AF',

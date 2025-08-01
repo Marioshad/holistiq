@@ -50,19 +50,20 @@ const FormButton: React.FC<FormButtonProps> = ({
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: borderRadius.full,
+      borderRadius: 12,
+      gap: 8,
     };
     
     // Apply size-specific padding
     switch (size) {
       case 'small':
-        buttonStyle = { ...buttonStyle, paddingHorizontal: spacing.lg, paddingVertical: spacing.md };
+        buttonStyle = { ...buttonStyle, paddingHorizontal: 16, paddingVertical: 8 };
         break;
       case 'medium':
-        buttonStyle = { ...buttonStyle, paddingHorizontal: spacing.xl, paddingVertical: spacing.base };
+        buttonStyle = { ...buttonStyle, paddingHorizontal: 20, paddingVertical: 12 };
         break;
       case 'large':
-        buttonStyle = { ...buttonStyle, paddingHorizontal: spacing['2xl'], paddingVertical: spacing.lg };
+        buttonStyle = { ...buttonStyle, paddingHorizontal: 24, paddingVertical: 16 };
         break;
     }
     

@@ -1,5 +1,5 @@
 {
-  "appName": "Healthyr - Health Tracking App",
+  "appName": "Holistiq - Health Tracking App",
   "version": "1.0.0",
   "description": "Comprehensive health tracking application with daily, monthly, and analytics features",
   "primaryColor": "rgb(196, 154, 255)",
@@ -145,42 +145,6 @@
           }
         },
         "development": {
-          "formComponents": {
-            "name": "FormComponentsScreen",
-            "file": "src/development-tools/FormComponentsScreen.tsx",
-            "type": "Development Screen",
-            "purpose": "Showcase reusable form components with style guide compliance",
-            "components": [
-              "FormInput examples (text, email, password, search, multiline, error states)",
-              "FormPicker examples (category, size, disabled states)",
-              "FormButton examples (all variants, sizes, icon positions, loading states)",
-              "DateTimePicker examples (date and time selection)",
-              "ColorPicker example (color selection)",
-              "Usage examples and component props documentation"
-            ],
-            "features": [
-              "Strictly reusable components only",
-              "Style guide compliance",
-              "Component prop documentation",
-              "Usage examples",
-              "Interactive demonstrations"
-            ]
-          },
-          "styleGuide": {
-            "name": "StyleGuideScreen",
-            "file": "src/development-tools/StyleGuideScreen.tsx",
-            "type": "Development Screen",
-            "purpose": "Design system showcase",
-            "components": [
-              "Color palette",
-              "Typography examples",
-              "Button variants",
-              "Card examples",
-              "Icon styles",
-              "Spacing scale",
-              "Usage guidelines"
-            ]
-          }
         }
       },
       "tabScreens": {
@@ -468,8 +432,6 @@
         "about": "AboutScreen",
         "entryManagement": "EntryManagementScreen → EntryListScreen",
         "development": {
-          "formComponents": "FormComponentsScreen",
-          "styleGuide": "StyleGuideScreen"
         }
       },
       "tabNavigation": {
@@ -501,8 +463,6 @@
     }
   },
   "developmentTools": {
-    "debugOverlay": "Shows current screen and component info",
-    "formComponents": "Interactive form component showcase",
-    "styleGuide": "Design system reference and template"
+    "debugOverlay": "Shows current screen and component info"
   }
 } 

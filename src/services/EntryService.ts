@@ -35,8 +35,45 @@ export class EntryService {
   }
 
   // Convert Firestore timestamp to ISO string
-  private static timestampToISO(timestamp: Timestamp | null): string {
-    return timestamp ? timestamp.toDate().toISOString() : new Date().toISOString();
+  private static timestampToISO(timestamp: Timestamp | Date | string | null | undefined): string {
+    try {
+      if (!timestamp) {
+        return new Date().toISOString();
+      }
+      
+      // If it's already a string, return it
+      if (typeof timestamp === 'string') {
+        return timestamp;
+      }
+      
+      // If it's a Firestore Timestamp, convert to Date
+      if (timestamp && typeof timestamp === 'object' && 'toDate' in timestamp) {
+        const firestoreTimestamp = timestamp as Timestamp;
+        if (firestoreTimestamp.toDate && typeof firestoreTimestamp.toDate === 'function') {
+          return firestoreTimestamp.toDate().toISOString();
+        }
+      }
+      
+      // If it's a Date object, convert to ISO string
+      if (timestamp instanceof Date) {
+        return timestamp.toISOString();
+      }
+      
+      // Handle Firestore Timestamp objects that might not have toDate method
+      if (timestamp && typeof timestamp === 'object' && timestamp.seconds !== undefined) {
+        // This is a Firestore Timestamp with seconds/nanoseconds
+        const seconds = timestamp.seconds;
+        const nanoseconds = timestamp.nanoseconds || 0;
+        const date = new Date(seconds * 1000 + nanoseconds / 1000000);
+        return date.toISOString();
+      }
+      
+      // Fallback to current date
+      return new Date().toISOString();
+    } catch (error) {
+      console.error('Error in timestampToISO:', error, 'Timestamp:', timestamp, 'Type:', typeof timestamp);
+      return new Date().toISOString();
+    }
   }
 
   // Convert ISO string to Firestore timestamp
@@ -48,31 +85,56 @@ export class EntryService {
   private static docToEntry(doc: QueryDocumentSnapshot<DocumentData>): Entry {
     const data = doc.data();
     
-    // Debug logging
-    console.log('Converting Firestore doc to Entry:', {
-      docId: doc.id,
-      data: JSON.stringify(data, null, 2)
-    });
-    
-    const entry = {
-      id: doc.id,
-      title: data.title,
-      category: data.category,
-      label: data.label,
-      description: data.description,
-      color: data.color,
-      createdAt: this.timestampToISO(data.createdAt),
-      updatedAt: this.timestampToISO(data.updatedAt),
-      // Include category-specific fields without overriding base fields
-      ...Object.fromEntries(
-        Object.entries(data).filter(([key]) => 
-          !['title', 'category', 'label', 'description', 'color', 'createdAt', 'updatedAt'].includes(key)
+    try {
+      // Log the timestamp data for debugging
+      if (__DEV__) {
+        console.log('Document timestamps:', {
+          docId: doc.id,
+          createdAt: data.createdAt,
+          createdAtType: typeof data.createdAt,
+          updatedAt: data.updatedAt,
+          updatedAtType: typeof data.updatedAt,
+        });
+      }
+      
+      const entry = {
+        id: doc.id,
+        title: data.title,
+        category: data.category,
+        label: data.label,
+        description: data.description,
+        color: data.color,
+        createdAt: this.timestampToISO(data.createdAt),
+        updatedAt: this.timestampToISO(data.updatedAt),
+        // Include category-specific fields without overriding base fields
+        ...Object.fromEntries(
+          Object.entries(data).filter(([key]) => 
+            !['title', 'category', 'label', 'description', 'color', 'createdAt', 'updatedAt'].includes(key)
+          )
         )
-      )
-    } as Entry;
-    
-    console.log('Converted Entry:', JSON.stringify(entry, null, 2));
-    return entry;
+      } as Entry;
+      
+      return entry;
+    } catch (error) {
+      console.error('Error converting document to Entry:', error, 'Document ID:', doc.id, 'Data:', data);
+      // Return a fallback entry with current timestamps
+      return {
+        id: doc.id,
+        title: data?.title || 'Unknown Entry',
+        category: data?.category || 'supplements',
+        label: data?.label,
+        description: data?.description,
+        color: data?.color,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        // Include category-specific fields without overriding base fields
+        ...Object.fromEntries(
+          Object.entries(data || {}).filter(([key]) => 
+            !['title', 'category', 'label', 'description', 'color', 'createdAt', 'updatedAt'].includes(key)
+          )
+        )
+      } as Entry;
+    }
   }
 
   // Clean data by removing undefined values and handling other Firestore restrictions
@@ -109,15 +171,46 @@ export class EntryService {
     try {
       const currentUserId = userId || this.getCurrentUserId();
       if (!currentUserId) {
-        console.warn('No user ID provided and no authenticated user');
         return [];
       }
 
       const entriesRef = this.getUserEntriesCollection(currentUserId);
-      const q = query(entriesRef, orderBy('updatedAt', 'desc'));
-      const querySnapshot = await getDocs(q);
       
-      return querySnapshot.docs.map(doc => this.docToEntry(doc));
+      // Try ordered query first, fallback to simple query if index is missing
+      let querySnapshot;
+      try {
+        const q = query(entriesRef, orderBy('updatedAt', 'desc'));
+        querySnapshot = await getDocs(q);
+      } catch (orderError) {
+        console.warn('OrderBy failed, trying simple query:', orderError);
+        // Fallback to simple query without ordering
+        querySnapshot = await getDocs(entriesRef);
+      }
+      
+      return querySnapshot.docs.map(doc => {
+        try {
+          return this.docToEntry(doc);
+        } catch (error) {
+          console.error('Error converting document to entry:', error, 'Document ID:', doc.id);
+          // Return a fallback entry
+          const data = doc.data();
+          return {
+            id: doc.id,
+            title: data?.title || 'Unknown Entry',
+            category: data?.category || 'supplements',
+            label: data?.label,
+            description: data?.description,
+            color: data?.color,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            ...Object.fromEntries(
+              Object.entries(data || {}).filter(([key]) => 
+                !['title', 'category', 'label', 'description', 'color', 'createdAt', 'updatedAt'].includes(key)
+              )
+            )
+          } as Entry;
+        }
+      });
     } catch (error) {
       console.error('Error getting entries:', error);
       return [];
@@ -129,11 +222,8 @@ export class EntryService {
     try {
       const currentUserId = userId || this.getCurrentUserId();
       if (!currentUserId) {
-        console.warn('No user ID provided and no authenticated user');
         return [];
       }
-
-      console.log(`Getting entries for category: ${category}, userId: ${currentUserId}`);
 
       const entriesRef = this.getUserEntriesCollection(currentUserId);
       
@@ -153,12 +243,30 @@ export class EntryService {
         querySnapshot = await getDocs(q);
       }
       
-      console.log(`Found ${querySnapshot.docs.length} documents for category ${category}`);
-      
-      const entries = querySnapshot.docs.map(doc => this.docToEntry(doc));
-      console.log(`Converted ${entries.length} entries for category ${category}`);
-      
-      return entries;
+      return querySnapshot.docs.map(doc => {
+        try {
+          return this.docToEntry(doc);
+        } catch (error) {
+          console.error('Error converting document to entry:', error, 'Document ID:', doc.id);
+          // Return a fallback entry
+          const data = doc.data();
+          return {
+            id: doc.id,
+            title: data?.title || 'Unknown Entry',
+            category: data?.category || 'supplements',
+            label: data?.label,
+            description: data?.description,
+            color: data?.color,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            ...Object.fromEntries(
+              Object.entries(data || {}).filter(([key]) => 
+                !['title', 'category', 'label', 'description', 'color', 'createdAt', 'updatedAt'].includes(key)
+              )
+            )
+          } as Entry;
+        }
+      });
     } catch (error) {
       console.error('Error getting entries by category:', error);
       return [];
@@ -175,7 +283,6 @@ export class EntryService {
     try {
       const currentUserId = userId || this.getCurrentUserId();
       if (!currentUserId) {
-        console.warn('No user ID provided and no authenticated user');
         return null;
       }
 
@@ -202,9 +309,6 @@ export class EntryService {
 
       const entriesRef = this.getUserEntriesCollection(userId);
       const docData = this.entryToDocData(entryData);
-      
-      // Log the cleaned data for debugging
-      console.log('Adding entry with data:', JSON.stringify(docData, null, 2));
       
       const docRef = await addDoc(entriesRef, docData);
       
@@ -291,7 +395,6 @@ export class EntryService {
     try {
       const currentUserId = userId || this.getCurrentUserId();
       if (!currentUserId) {
-        console.warn('No user ID provided and no authenticated user');
         return [];
       }
 
@@ -316,7 +419,6 @@ export class EntryService {
     try {
       const currentUserId = userId || this.getCurrentUserId();
       if (!currentUserId) {
-        console.warn('No user ID provided and no authenticated user');
         return [];
       }
 
@@ -328,7 +430,30 @@ export class EntryService {
       );
       const querySnapshot = await getDocs(q);
       
-      return querySnapshot.docs.map(doc => this.docToEntry(doc));
+      return querySnapshot.docs.map(doc => {
+        try {
+          return this.docToEntry(doc);
+        } catch (error) {
+          console.error('Error converting document to entry:', error, 'Document ID:', doc.id);
+          // Return a fallback entry
+          const data = doc.data();
+          return {
+            id: doc.id,
+            title: data?.title || 'Unknown Entry',
+            category: data?.category || 'supplements',
+            label: data?.label,
+            description: data?.description,
+            color: data?.color,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            ...Object.fromEntries(
+              Object.entries(data || {}).filter(([key]) => 
+                !['title', 'category', 'label', 'description', 'color', 'createdAt', 'updatedAt'].includes(key)
+              )
+            )
+          } as Entry;
+        }
+      });
     } catch (error) {
       console.error('Error getting entries by color:', error);
       return [];
@@ -340,7 +465,6 @@ export class EntryService {
     try {
       const currentUserId = userId || this.getCurrentUserId();
       if (!currentUserId) {
-        console.warn('No user ID provided and no authenticated user');
         return [];
       }
 
@@ -348,7 +472,30 @@ export class EntryService {
       const q = query(entriesRef, orderBy('updatedAt', 'desc'), limit(limitCount));
       const querySnapshot = await getDocs(q);
       
-      return querySnapshot.docs.map(doc => this.docToEntry(doc));
+      return querySnapshot.docs.map(doc => {
+        try {
+          return this.docToEntry(doc);
+        } catch (error) {
+          console.error('Error converting document to entry:', error, 'Document ID:', doc.id);
+          // Return a fallback entry
+          const data = doc.data();
+          return {
+            id: doc.id,
+            title: data?.title || 'Unknown Entry',
+            category: data?.category || 'supplements',
+            label: data?.label,
+            description: data?.description,
+            color: data?.color,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            ...Object.fromEntries(
+              Object.entries(data || {}).filter(([key]) => 
+                !['title', 'category', 'label', 'description', 'color', 'createdAt', 'updatedAt'].includes(key)
+              )
+            )
+          } as Entry;
+        }
+      });
     } catch (error) {
       console.error('Error getting recent entries:', error);
       return [];
@@ -404,7 +551,6 @@ export class EntryService {
     try {
       const currentUserId = userId || this.getCurrentUserId();
       if (!currentUserId) {
-        console.warn('No user ID provided and no authenticated user');
         return {
           totalEntries: 0,
           entriesByCategory: {
@@ -481,35 +627,7 @@ export class EntryService {
     }
   }
 
-  // Debug method to test data retrieval
-  static async debugGetAllEntries(userId?: string): Promise<void> {
-    try {
-      const currentUserId = userId || this.getCurrentUserId();
-      if (!currentUserId) {
-        console.warn('No user ID provided and no authenticated user');
-        return;
-      }
 
-      console.log('=== DEBUG: Getting all entries ===');
-      console.log('User ID:', currentUserId);
-
-      const entriesRef = this.getUserEntriesCollection(currentUserId);
-      const querySnapshot = await getDocs(entriesRef);
-      
-      console.log(`Total documents found: ${querySnapshot.docs.length}`);
-      
-      querySnapshot.docs.forEach((doc, index) => {
-        console.log(`Document ${index + 1}:`, {
-          id: doc.id,
-          data: doc.data()
-        });
-      });
-      
-      console.log('=== END DEBUG ===');
-    } catch (error) {
-      console.error('Debug error:', error);
-    }
-  }
 }
 
 export default EntryService; 

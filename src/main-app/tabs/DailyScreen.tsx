@@ -1,19 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, FlatList } from 'react-native';
 import { Card, Title, Paragraph, Button } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  useAnimatedGestureHandler,
+  runOnJS,
+  withSpring,
+  withTiming,
+  withRepeat,
+} from 'react-native-reanimated';
 import { RootStackParamList, DailyHabits, ScheduledActivity, Entry, EntryCategory } from '../../types';
 import StorageService from '../../services/StorageService';
 import UserService from '../../services/UserService';
 import ScheduleService from '../../services/ScheduleService';
 import EntryService from '../../services/EntryService';
-import ScheduleRecordBottomSheet from '../../components/ScheduleRecordBottomSheet';
-import EntryEditDrawer from '../../components/EntryEditDrawer';
+import ScheduleEntry from '../../components/ScheduleEntry';
+import TaskEditDrawer from '../../components/TaskEditDrawer';
 import DebugOverlay from '../../components/DebugOverlay';
 import TimeBasedGreeting from '../../components/ui/TimeBasedGreeting';
+import ConfirmationModal from '../../components/ConfirmationModal';
 import { auth } from '../../../firebase';
 import {
   colors,
@@ -22,6 +33,7 @@ import {
   borderRadius,
   shadows,
 } from '../../styles/styleGuide';
+import { useToast } from '../../contexts/ToastContext';
 
 type DailyScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'MainApp'>;
 
@@ -47,6 +59,7 @@ interface DateItem {
 
 const DailyScreen: React.FC = () => {
   const navigation = useNavigation<DailyScreenNavigationProp>();
+  const { showSuccess, showWarning } = useToast();
   const [selectedDate, setSelectedDate] = useState<string>(StorageService.formatDate(new Date()));
   const [dailyHabits, setDailyHabits] = useState<DailyHabits | null>(null);
   const [userName, setUserName] = useState<string>('User');
@@ -57,29 +70,247 @@ const DailyScreen: React.FC = () => {
   const [scheduledActivities, setScheduledActivities] = useState<ScheduledActivity[]>([]);
   const [isBottomSheetVisible, setIsBottomSheetVisible] = useState(false);
   const [entriesMap, setEntriesMap] = useState<Map<string, Entry>>(new Map());
+  const [loadingScheduledActivities, setLoadingScheduledActivities] = useState(false);
 
-  // State for entry edit drawer
-  const [isEntryEditDrawerVisible, setIsEntryEditDrawerVisible] = useState(false);
-  const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
-  const [selectedActivityId, setSelectedActivityId] = useState<string | undefined>(undefined);
-  const [selectedCompletionDate, setSelectedCompletionDate] = useState<string | undefined>(undefined);
+  // State for task edit drawer
+  const [isTaskEditDrawerVisible, setIsTaskEditDrawerVisible] = useState(false);
+  const [selectedActivity, setSelectedActivity] = useState<ScheduledActivity | null>(null);
 
   // New state for email verification
   const [isEmailVerified, setIsEmailVerified] = useState(true);
+
+  // State for confirmation modal
+  const [confirmationModal, setConfirmationModal] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    isDangerous: false,
+  });
+
+  // Swipeable Task Card Component with improved stability
+  const SwipeableTaskCard = ({ task }: { task: TaskItem }) => {
+    const translateX = useSharedValue(0);
+    const isPast = isTaskInPast(task.time, selectedDate);
+    const categoryIcon = getCategoryIcon(task.category);
+    const [isLoading, setIsLoading] = useState(false);
+    const spinValue = useSharedValue(0);
+
+    // Initialize shared value properly
+    useEffect(() => {
+      translateX.value = 0;
+    }, []);
+
+    // Start rotation animation when loading
+    useEffect(() => {
+      if (isLoading) {
+        spinValue.value = 0;
+        spinValue.value = withRepeat(
+          withTiming(360, { duration: 1000 }),
+          -1, // Infinite repeat
+          false // Don't reverse
+        );
+      } else {
+        spinValue.value = 0;
+      }
+    }, [isLoading]);
+
+    const spinStyle = useAnimatedStyle(() => {
+      return {
+        transform: [{ rotate: `${spinValue.value}deg` }],
+      };
+    });
+
+    const handleTaskToggleWithLoader = async (taskId: string) => {
+      setIsLoading(true);
+      try {
+        await handleTaskToggle(taskId);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const gestureHandler = useAnimatedGestureHandler({
+      onStart: (_, context: any) => {
+        context.startX = translateX.value;
+      },
+      onActive: (event, context: any) => {
+        // Limit swipe distance to 110px each side (action elements are 120px wide)
+        const maxSwipeDistance = 110;
+        const newValue = context.startX + event.translationX;
+        
+        if (newValue > maxSwipeDistance) {
+          translateX.value = maxSwipeDistance;
+        } else if (newValue < -maxSwipeDistance) {
+          translateX.value = -maxSwipeDistance;
+        } else {
+          translateX.value = newValue;
+        }
+      },
+      onEnd: (event) => {
+        const shouldSnapBack = Math.abs(event.translationX) < 108; // Changed: 90% of 120px action width
+        const shouldComplete = event.translationX < -108; // Changed: left swipe to complete at 90%
+        const shouldDelete = event.translationX > 108; // Changed: right swipe to delete at 90%
+
+        if (shouldSnapBack) {
+          translateX.value = withSpring(0);
+        } else if (shouldComplete) {
+          runOnJS(handleTaskToggleWithLoader)(task.id);
+          translateX.value = withSpring(0);
+        } else if (shouldDelete) {
+          runOnJS(showDeleteConfirmation)(task);
+          translateX.value = withSpring(0);
+        }
+      },
+    });
+
+    const animatedStyle = useAnimatedStyle(() => {
+      return {
+        transform: [{ translateX: translateX.value }],
+      };
+    });
+
+    const leftActionStyle = useAnimatedStyle(() => {
+      const opacity = withTiming(translateX.value > 0 ? Math.min(translateX.value / 100, 1) : 0); // Changed: right swipe shows left action
+      return { opacity };
+    });
+
+    const rightActionStyle = useAnimatedStyle(() => {
+      const opacity = withTiming(translateX.value < 0 ? Math.min(Math.abs(translateX.value) / 100, 1) : 0); // Changed: left swipe shows right action
+      return { opacity };
+    });
+
+    return (
+      <View style={styles.taskCardWrapper}>
+        {/* Loading Indicator */}
+        {isLoading && (
+          <View style={styles.loadingOverlay}>
+            <Animated.View style={[styles.loadingSpinner, spinStyle]}>
+              <MaterialIcons name="hourglass-empty" size={20} color="#FFFFFF" />
+            </Animated.View>
+          </View>
+        )}
+
+        <View style={styles.swipeableContainer}>
+          {/* Left Action (Delete) - Now triggered by right swipe */}
+          <Animated.View style={[styles.swipeAction, styles.deleteAction, leftActionStyle]}>
+            <MaterialIcons name="delete" size={24} color="#FFFFFF" />
+            <Text style={styles.actionText}>Delete</Text>
+          </Animated.View>
+
+          {/* Right Action (Complete) - Now triggered by left swipe */}
+          <Animated.View style={[styles.swipeAction, styles.completeAction, rightActionStyle]}>
+            <MaterialIcons name="check" size={24} color="#FFFFFF" />
+            <Text style={styles.actionText}>Done</Text>
+          </Animated.View>
+
+          {/* Task Card */}
+          <PanGestureHandler onGestureEvent={gestureHandler}>
+            <Animated.View style={[styles.taskCardContainer, animatedStyle]}>
+              <TouchableOpacity onPress={() => handleTaskPress(task)}>
+                <Card style={[
+                  styles.taskCard, 
+                  isPast && styles.pastTaskCard
+                ]}>
+                  <View style={styles.taskContent}>
+                    <View style={styles.taskLeft}>
+                      <View style={styles.timeContainer}>
+                        <Text style={[
+                          styles.taskTime,
+                          isPast && styles.pastTaskTime
+                        ]}>
+                          {task.time}
+                        </Text>
+                      </View>
+                      
+                      <View style={styles.taskInfo}>
+                        <View style={styles.taskHeader}>
+                          <View style={[styles.categoryIconContainer, { backgroundColor: task.color }]}>
+                            <View style={styles.overlay} />
+                            <MaterialIcons 
+                              name={categoryIcon as any} 
+                              size={15} 
+                              color={isPast ? '#6B7280' : task.color} 
+                            />
+                          </View>
+                          <View style={[styles.categoryPill, { backgroundColor: task.color }]}>
+                          <View style={styles.overlay} />
+                            <Text style={[
+                              styles.categoryText, 
+                              { color: isPast ? '#6B7280' : task.color }
+                            ]}>
+                              {task.category}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={[
+                          styles.taskTitle,
+                          isPast && styles.pastTaskTitle
+                        ]}>
+                          {task.title}
+                        </Text>
+                        {task.type && (
+                          <Text style={[styles.taskType, isPast && styles.pastTaskType]}>
+                            {task.type}
+                          </Text>
+                        )}
+                        {task.label && (
+                          <Text style={[styles.taskLabel, isPast && styles.pastTaskLabel]}>
+                            {task.label}
+                          </Text>
+                        )}
+                        {task.note && (
+                          <Text style={[styles.taskNote, isPast && styles.pastTaskNote]}>
+                            {task.note}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                    <View style={styles.taskRight}>
+                      {/* Completion toggle button for scheduled activities */}
+                      {scheduledActivities.find(a => a.id === task.id) && (
+                        <TouchableOpacity 
+                          style={styles.completionToggle}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleTaskToggleWithLoader(task.id);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <MaterialIcons 
+                            name={task.completed ? "check-circle" : "radio-button-unchecked"} 
+                            size={24} 
+                            color={task.completed ? "#10B981" : "#9CA3AF"} 
+                          />
+                        </TouchableOpacity>
+                      )}
+                      {task.completed && !scheduledActivities.find(a => a.id === task.id) && (
+                        <View style={styles.completedIndicator}>
+                          <MaterialIcons name="check-circle" size={20} color="#10B981" />
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </Card>
+              </TouchableOpacity>
+            </Animated.View>
+          </PanGestureHandler>
+        </View>
+      </View>
+    );
+  };
 
   useEffect(() => {
     loadUserData();
     loadDailyHabits(selectedDate);
     loadScheduledActivities(selectedDate);
     checkEmailVerificationStatus();
-  }, [selectedDate]);
+  }, []); // Only run once on mount
 
-  // Refresh data when screen comes into focus
-  useFocusEffect(
-    React.useCallback(() => {
-      loadScheduledActivities(selectedDate);
-    }, [selectedDate])
-  );
+  // Separate effect for date changes - only reload scheduled activities
+  useEffect(() => {
+    loadScheduledActivities(selectedDate);
+  }, [selectedDate]);
 
   function getFormattedDate(date: Date): string {
     const weekday = date.toLocaleDateString('en-US', { weekday: 'short' }); // Mon
@@ -109,19 +340,24 @@ const DailyScreen: React.FC = () => {
     }
   };
 
-  const loadDailyHabits = async (date: string) => {
-    setLoading(true);
+  const loadDailyHabits = async (date: string, setLoadingState: boolean = true) => {
+    if (setLoadingState) {
+      setLoading(true);
+    }
     try {
       const habits = await StorageService.getOrCreateDailyHabits(date);
       setDailyHabits(habits);
     } catch (error) {
       Alert.alert('Error', 'Failed to load daily habits');
     } finally {
-      setLoading(false);
+      if (setLoadingState) {
+        setLoading(false);
+      }
     }
   };
 
   const loadScheduledActivities = async (date: string) => {
+    setLoadingScheduledActivities(true);
     try {
       const userId = auth.currentUser?.uid;
       if (!userId) {
@@ -150,6 +386,13 @@ const DailyScreen: React.FC = () => {
       setEntriesMap(newEntriesMap);
     } catch (error) {
       console.error('Error loading scheduled activities:', error);
+      // Don't let Reanimated errors affect data loading
+      if (error.message && error.message.includes('Reanimated')) {
+        console.warn('Reanimated error detected, continuing with data loading...');
+        return;
+      }
+    } finally {
+      setLoadingScheduledActivities(false);
     }
   };
 
@@ -194,88 +437,74 @@ const DailyScreen: React.FC = () => {
   };
 
   const getCategoryIcon = (category: string) => {
-    const categoryIcons = {
+    const iconMap: { [key: string]: string } = {
       'Nutrition': 'restaurant',
-      'Health': 'local-pharmacy',
-      'Supplements': 'local-pharmacy', 
-      'Vitamins': 'medication',
+      'Health': 'favorite',
       'Fitness': 'fitness-center',
-      'Wellness': 'spa',
-      'Medicine': 'healing',
+      'Wellness': 'self-improvement',
+      'Supplements': 'medication',
+      'Vitamins': 'medication',
+      'Medicine': 'medication',
     };
-    return categoryIcons[category] || 'circle';
-  };
-
-  // Helper function to map display categories to entry categories
-  const mapDisplayCategoryToEntryCategory = (displayCategory: string): EntryCategory => {
-    const categoryMap: { [key: string]: EntryCategory } = {
-      'Nutrition': 'nutrition',
-      'Health': 'health',
-      'Supplements': 'supplements',
-      'Vitamins': 'vitamins',
-      'Fitness': 'fitness',
-      'Wellness': 'wellness',
-      'Medicine': 'medicine',
-    };
-    return categoryMap[displayCategory] || 'nutrition';
+    return iconMap[category] || 'check-circle';
   };
 
   const convertHabitsToTasks = (): TaskItem[] => {
     const tasks: TaskItem[] = [];
 
     // Add legacy habit tasks if they exist
-    if (dailyHabits) {
-      tasks.push(
-        {
-          id: 'breakfast',
-          title: dailyHabits.meals?.breakfast || 'Plan Breakfast',
-          category: 'Nutrition',
-          time: '08:00',
-          completed: !!dailyHabits.meals?.breakfast,
-          color: '#FF6B6B',
-        },
-        {
-          id: 'supplements',
-          title: `Supplements (${dailyHabits.supplements?.length || 0})`,
-          category: 'Health',
-          time: '09:00',
-          completed: dailyHabits.supplements?.some(s => s.taken) || false,
-          color: '#4ECDC4',
-        },
-        {
-          id: 'lunch',
-          title: dailyHabits.meals?.lunch || 'Plan Lunch',
-          category: 'Nutrition',
-          time: '12:30',
-          completed: !!dailyHabits.meals?.lunch,
-          color: '#FF6B6B',
-        },
-        {
-          id: 'exercise',
-          title: `Exercise (${dailyHabits.exercises?.length || 0} planned)`,
-          category: 'Fitness',
-          time: '15:00',
-          completed: dailyHabits.exercises?.some(e => e.completed) || false,
-          color: '#45B7D1',
-        },
-        {
-          id: 'dinner',
-          title: dailyHabits.meals?.dinner || 'Plan Dinner',
-          category: 'Nutrition',
-          time: '18:30',
-          completed: !!dailyHabits.meals?.dinner,
-          color: '#FF6B6B',
-        },
-        {
-          id: 'stretching',
-          title: `Stretching (${dailyHabits.stretching?.length || 0} planned)`,
-          category: 'Wellness',
-          time: '20:00',
-          completed: dailyHabits.stretching?.some(s => s.completed) || false,
-          color: '#96CEB4',
-        }
-      );
-    }
+    // if (dailyHabits) {
+    //   tasks.push(
+    //     {
+    //       id: 'breakfast',
+    //       title: dailyHabits.meals?.breakfast || 'Plan Breakfast',
+    //       category: 'Nutrition',
+    //       time: '08:00',
+    //       completed: !!dailyHabits.meals?.breakfast,
+    //       color: '#FF6B6B',
+    //     },
+    //     {
+    //       id: 'supplements',
+    //       title: `Supplements (${dailyHabits.supplements?.length || 0})`,
+    //       category: 'Health',
+    //       time: '09:00',
+    //       completed: dailyHabits.supplements?.some(s => s.taken) || false,
+    //       color: '#4ECDC4',
+    //     },
+    //     {
+    //       id: 'lunch',
+    //       title: dailyHabits.meals?.lunch || 'Plan Lunch',
+    //       category: 'Nutrition',
+    //       time: '12:30',
+    //       completed: !!dailyHabits.meals?.lunch,
+    //       color: '#FF6B6B',
+    //     },
+    //     {
+    //       id: 'exercise',
+    //       title: `Exercise (${dailyHabits.exercises?.length || 0} planned)`,
+    //       category: 'Fitness',
+    //       time: '15:00',
+    //       completed: dailyHabits.exercises?.some(e => e.completed) || false,
+    //       color: '#45B7D1',
+    //     },
+    //     {
+    //       id: 'dinner',
+    //       title: dailyHabits.meals?.dinner || 'Plan Dinner',
+    //       category: 'Nutrition',
+    //       time: '18:30',
+    //       completed: !!dailyHabits.meals?.dinner,
+    //       color: '#FF6B6B',
+    //     },
+    //     {
+    //       id: 'stretching',
+    //       title: `Stretching (${dailyHabits.stretching?.length || 0} planned)`,
+    //       category: 'Wellness',
+    //       time: '20:00',
+    //       completed: dailyHabits.stretching?.some(s => s.completed) || false,
+    //       color: '#96CEB4',
+    //     }
+    //   );
+    // }
 
     // Add scheduled activities with enhanced details
     scheduledActivities.forEach(activity => {
@@ -291,23 +520,82 @@ const DailyScreen: React.FC = () => {
           medicine: '#EF4444',
         };
 
-        // Get entry type/label for display
+        // Get entry type/label for display with more detailed information
         let displayType = '';
         if (entry.category === 'supplements' || entry.category === 'vitamins') {
           const suppEntry = entry as any;
-          displayType = suppEntry.type || suppEntry.doseAmount + ' ' + suppEntry.doseUnit || '';
+          // For supplements/vitamins, prioritize showing the type (tablet, gummy, etc.)
+          if (suppEntry.type) {
+            displayType = suppEntry.type.charAt(0).toUpperCase() + suppEntry.type.slice(1).toLowerCase();
+            // Add dose information if available
+            if (suppEntry.doseAmount && suppEntry.doseUnit) {
+              displayType += ` • ${suppEntry.doseAmount} ${suppEntry.doseUnit}`;
+            } else if (suppEntry.dose) {
+              displayType += ` • ${suppEntry.dose}`;
+            }
+          } else if (suppEntry.doseAmount && suppEntry.doseUnit) {
+            displayType = `${suppEntry.doseAmount} ${suppEntry.doseUnit}`;
+          } else if (suppEntry.dose) {
+            displayType = suppEntry.dose;
+          }
         } else if (entry.category === 'nutrition') {
           const nutEntry = entry as any;
-          displayType = nutEntry.mealType || 'meal';
+          if (nutEntry.calories) {
+            displayType = `${nutEntry.calories} cal`;
+            if (nutEntry.mealType) {
+              displayType += ` • ${nutEntry.mealType}`;
+            }
+          } else if (nutEntry.mealType) {
+            displayType = nutEntry.mealType;
+          } else if (nutEntry.servingSize) {
+            displayType = nutEntry.servingSize;
+          }
         } else if (entry.category === 'fitness') {
           const fitnessEntry = entry as any;
-          displayType = fitnessEntry.duration ? `${fitnessEntry.duration} min` : 'workout';
+          if (fitnessEntry.duration) {
+            displayType = `${fitnessEntry.duration} min`;
+            if (fitnessEntry.intensity) {
+              displayType += ` • ${fitnessEntry.intensity}`;
+            }
+          } else if (fitnessEntry.intensity) {
+            displayType = fitnessEntry.intensity;
+          } else if (fitnessEntry.type) {
+            displayType = fitnessEntry.type;
+          }
         } else if (entry.category === 'wellness') {
           const wellnessEntry = entry as any;
-          displayType = wellnessEntry.type || 'session';
+          if (wellnessEntry.duration) {
+            displayType = `${wellnessEntry.duration} min`;
+            if (wellnessEntry.type) {
+              displayType += ` • ${wellnessEntry.type}`;
+            }
+          } else if (wellnessEntry.type) {
+            displayType = wellnessEntry.type;
+          }
+        } else if (entry.category === 'health') {
+          const healthEntry = entry as any;
+          if (healthEntry.duration) {
+            displayType = `${healthEntry.duration} min`;
+            if (healthEntry.type) {
+              displayType += ` • ${healthEntry.type}`;
+            }
+          } else if (healthEntry.type) {
+            displayType = healthEntry.type;
+          } else if (healthEntry.provider) {
+            displayType = healthEntry.provider;
+          }
         } else if (entry.category === 'medicine') {
           const medicineEntry = entry as any;
-          displayType = medicineEntry.dosage || 'dose';
+          if (medicineEntry.dosage) {
+            displayType = medicineEntry.dosage;
+            if (medicineEntry.frequency) {
+              displayType += ` • ${medicineEntry.frequency}`;
+            }
+          } else if (medicineEntry.frequency) {
+            displayType = medicineEntry.frequency;
+          } else if (medicineEntry.type) {
+            displayType = medicineEntry.type;
+          }
         }
 
         tasks.push({
@@ -328,8 +616,10 @@ const DailyScreen: React.FC = () => {
   };
 
   const handleTaskToggle = async (taskId: string) => {
+    
     // Check if it's a scheduled activity
     const activity = scheduledActivities.find(a => a.id === taskId);
+    
     if (activity) {
       try {
         const userId = auth.currentUser?.uid;
@@ -337,18 +627,20 @@ const DailyScreen: React.FC = () => {
           Alert.alert('Error', 'User must be authenticated');
           return;
         }
-
+        
         if (activity.completed) {
           await ScheduleService.uncompleteActivity(userId, taskId);
+          showWarning('Task not completed!');
         } else {
           await ScheduleService.completeActivity(userId, taskId);
+          showSuccess('Task completed!');
         }
         loadScheduledActivities(selectedDate);
       } catch (error) {
-        console.error('Error toggling activity:', error);
         Alert.alert('Error', 'Failed to update activity status');
       }
     } else {
+      console.log('DailyScreen: No activity found, navigating to habit detail');
       // Handle legacy habit tasks
       navigation.navigate('HabitDetail', {
         date: selectedDate,
@@ -375,10 +667,8 @@ const DailyScreen: React.FC = () => {
         // For scheduled activities, fetch the entry and open edit drawer
         const entry = await EntryService.getEntryById(activity.entryId, userId);
         if (entry) {
-          setSelectedEntry(entry);
-          setSelectedActivityId(activity.id);
-          setSelectedCompletionDate(activity.completedAt);
-          setIsEntryEditDrawerVisible(true);
+          setSelectedActivity(activity);
+          setIsTaskEditDrawerVisible(true);
         } else {
           Alert.alert('Error', 'Entry not found');
         }
@@ -387,32 +677,11 @@ const DailyScreen: React.FC = () => {
         Alert.alert('Error', 'Failed to load entry details');
       }
     } else {
-      // Handle legacy habit tasks - create temporary entries for editing
-      const entryCategory = mapDisplayCategoryToEntryCategory(task.category);
-      
-      // Create a temporary entry for viewing/editing
-      const tempEntry: Entry = {
-        id: task.id,
-        title: task.title,
-        category: entryCategory,
-        label: task.category,
-        description: `Legacy ${task.category.toLowerCase()} entry`,
-        color: task.color,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      } as Entry;
-
-      setSelectedEntry(tempEntry);
-      setSelectedActivityId(undefined);
-      setSelectedCompletionDate(undefined);
-      setIsEntryEditDrawerVisible(true);
+      Alert.alert('Info', 'This task cannot be edited.');
     }
   };
 
-  const handleEntryUpdated = () => {
-    // Refresh the scheduled activities to show updated data
-    loadScheduledActivities(selectedDate);
-  };
+  // Removed handleEntryUpdated as it's no longer needed
 
   const isPastDate = (date: string) => {
     const today = new Date().toISOString().split('T')[0];
@@ -450,94 +719,38 @@ const DailyScreen: React.FC = () => {
     );
   };
 
-  const renderTaskItem = ({ item }: { item: TaskItem }) => {
-    const isPast = isTaskInPast(item.time, selectedDate);
-    const categoryIcon = getCategoryIcon(item.category);
+  const showDeleteConfirmation = (task: TaskItem) => {
+    setConfirmationModal({
+      visible: true,
+      title: 'Delete Task',
+      message: `Are you sure you want to delete "${task.title}"? This action cannot be undone.`,
+      onConfirm: () => handleDeleteTask(task),
+      isDangerous: true,
+    });
+  };
 
-    return (
-      <TouchableOpacity onPress={() => handleTaskPress(item)}>
-        <Card style={[
-          styles.taskCard, 
-          isPast && styles.pastTaskCard
-        ]}>
-          <View style={styles.taskContent}>
-            <View style={styles.taskLeft}>
-              <View style={styles.timeContainer}>
-                <Text style={[
-                  styles.taskTime,
-                  isPast && styles.pastTaskTime
-                ]}>
-                  {item.time}
-                </Text>
-              </View>
-              <View style={[styles.categoryIconContainer, { backgroundColor: item.color + '20' }]}>
-                <MaterialIcons 
-                  name={categoryIcon as any} 
-                  size={20} 
-                  color={isPast ? '#6B7280' : item.color} 
-                />
-              </View>
-              <View style={styles.taskInfo}>
-                <View style={styles.taskHeader}>
-                  <View style={[styles.categoryPill, { backgroundColor: item.color + '20' }]}>
-                    <Text style={[
-                      styles.categoryText, 
-                      { color: isPast ? '#6B7280' : item.color }
-                    ]}>
-                      {item.category}
-                    </Text>
-                  </View>
-                  {item.type && (
-                    <Text style={[styles.taskType, isPast && styles.pastTaskType]}>
-                      {item.type}
-                    </Text>
-                  )}
-                </View>
-                <Text style={[
-                  styles.taskTitle,
-                  isPast && styles.pastTaskTitle
-                ]}>
-                  {item.title}
-                </Text>
-                {item.label && (
-                  <Text style={[styles.taskLabel, isPast && styles.pastTaskLabel]}>
-                    {item.label}
-                  </Text>
-                )}
-                {item.note && (
-                  <Text style={[styles.taskNote, isPast && styles.pastTaskNote]}>
-                    {item.note}
-                  </Text>
-                )}
-              </View>
-            </View>
-            <View style={styles.taskRight}>
-              {/* Completion toggle button for scheduled activities */}
-              {scheduledActivities.find(a => a.id === item.id) && (
-                <TouchableOpacity 
-                  style={styles.completionToggle}
-                  onPress={() => handleTaskToggle(item.id)}
-                >
-                  <MaterialIcons 
-                    name={item.completed ? "check-circle" : "radio-button-unchecked"} 
-                    size={24} 
-                    color={item.completed ? "#10B981" : "#9CA3AF"} 
-                  />
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.menuButton}>
-                <MaterialIcons name="more-vert" size={20} color="#9CA3AF" />
-              </TouchableOpacity>
-              {item.completed && !scheduledActivities.find(a => a.id === item.id) && (
-                <View style={styles.completedIndicator}>
-                  <MaterialIcons name="check-circle" size={20} color="#10B981" />
-                </View>
-              )}
-            </View>
-          </View>
-        </Card>
-      </TouchableOpacity>
-    );
+  const handleDeleteTask = async (task: TaskItem) => {
+    try {
+      // Check if it's a scheduled activity
+      const activity = scheduledActivities.find(a => a.id === task.id);
+      if (activity) {
+        const userId = auth.currentUser?.uid;
+        if (!userId) {
+          Alert.alert('Error', 'User must be authenticated');
+          return;
+        }
+        await ScheduleService.deleteScheduledActivity(userId, task.id);
+        loadScheduledActivities(selectedDate);
+      } else {
+        // Handle legacy habit tasks - you might want to implement this
+        Alert.alert('Info', 'Legacy habit tasks cannot be deleted through swipe gestures.');
+      }
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      Alert.alert('Error', 'Failed to delete task');
+    } finally {
+      setConfirmationModal(prev => ({ ...prev, visible: false }));
+    }
   };
 
   const checkEmailVerificationStatus = () => {
@@ -565,8 +778,7 @@ const DailyScreen: React.FC = () => {
     try {
       const result = await UserService.sendEmailVerification();
       if (result.success) {
-        // You might want to show a toast here
-        Alert.alert('Success', result.message);
+        Alert.alert('Success', 'Verification email sent!');
       } else {
         Alert.alert('Error', result.message);
       }
@@ -596,15 +808,6 @@ const DailyScreen: React.FC = () => {
             <TimeBasedGreeting name={userName} variant="header" />
             <Text style={styles.date}>{currentMonth}</Text>
           </View>
-          {/* <TouchableOpacity 
-            style={styles.profileButton}
-            onPress={() => {
-              // TODO: Navigate to profile when available
-              console.log('Profile button pressed');
-            }}
-          >
-            <MaterialIcons name="person" size={24} color="#1F2937" />
-          </TouchableOpacity> */}
         </View>
         
         {/* Date Selector */}
@@ -651,25 +854,79 @@ const DailyScreen: React.FC = () => {
       )}
 
       {/* Content */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Tasks Section */}
-        <View style={styles.todaysTasksWrapper}>
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Today's Tasks</Text>
-              <Text style={styles.taskCount}>
-                {tasks.filter(t => t.completed).length}/{tasks.length} completed
-              </Text>
-            </View>
-            
-            {tasks.map((task) => (
-              <View key={task.id} style={styles.taskContainer}>
-                {renderTaskItem({ item: task })}
+      <FlatList
+        style={styles.content}
+        data={[{ key: 'content' }]}
+        renderItem={() => (
+          <View style={styles.todaysTasksWrapper}>
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Today's Tasks</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={styles.taskCount}>
+                    {tasks.filter(t => t.completed).length}/{tasks.length} completed
+                  </Text>
+                  <TouchableOpacity onPress={() => loadScheduledActivities(selectedDate)} style={{ marginLeft: 4 }}>
+                    <MaterialIcons name="refresh" size={20} color="#6B7280" />
+                  </TouchableOpacity>
+                </View>
               </View>
-            ))}
+              
+              {loadingScheduledActivities ? (
+                <View style={styles.loadingContainer}>
+                  <Text style={styles.loadingText}>Loading tasks...</Text>
+                </View>
+              ) : tasks.length > 0 ? (
+                (() => {
+                  const pastTasks = tasks.filter(task => isTaskInPast(task.time, selectedDate));
+                  const futureTasks = tasks.filter(task => !isTaskInPast(task.time, selectedDate));
+                  
+                  // Sort past tasks by date descending (most recent first)
+                  const sortedPastTasks = pastTasks.sort((a, b) => {
+                    const dateA = new Date(selectedDate + ' ' + a.time);
+                    const dateB = new Date(selectedDate + ' ' + b.time);
+                    return dateB.getTime() - dateA.getTime();
+                  });
+                  
+                  return (
+                    <>
+                      {/* Future Tasks */}
+                      {futureTasks.map((task) => (
+                        <View key={task.id} style={styles.taskContainer}>
+                          <SwipeableTaskCard task={task} />
+                        </View>
+                      ))}
+                      
+                      {/* Divider between past and future tasks */}
+                      {pastTasks.length > 0 && futureTasks.length > 0 && (
+                        <View style={styles.taskDivider}>
+                          <View style={styles.dividerLine} />
+                          <Text style={styles.dividerText}>Past Tasks</Text>
+                          <View style={styles.dividerLine} />
+                        </View>
+                      )}
+                      
+                      {/* Past Tasks */}
+                      {sortedPastTasks.map((task) => (
+                        <View key={task.id} style={styles.taskContainer}>
+                          <SwipeableTaskCard task={task} />
+                        </View>
+                      ))}
+                    </>
+                  );
+                })()
+              ) : (
+                <View style={styles.noTasksMessage}>
+                  <MaterialIcons name="check-circle" size={40} color="#9CA3AF" />
+                  <Text style={styles.noTasksText}>No tasks for today. Add one!</Text>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
-      </ScrollView>
+        )}
+        keyExtractor={(item) => item.key}
+        showsVerticalScrollIndicator={false}
+      />
 
       {/* FAB for scheduling */}
       <TouchableOpacity
@@ -684,7 +941,7 @@ const DailyScreen: React.FC = () => {
       </TouchableOpacity>
 
       {/* Schedule Record Bottom Sheet */}
-      <ScheduleRecordBottomSheet
+      <ScheduleEntry
         isVisible={isBottomSheetVisible}
         onClose={() => setIsBottomSheetVisible(false)}
         selectedDate={selectedDate}
@@ -693,22 +950,31 @@ const DailyScreen: React.FC = () => {
         }}
       />
 
-      {/* Entry Edit Drawer */}
-      {selectedEntry && (
-        <EntryEditDrawer
-          isVisible={isEntryEditDrawerVisible}
+      {/* Task Edit Drawer */}
+      {selectedActivity && (
+        <TaskEditDrawer
+          isVisible={isTaskEditDrawerVisible}
           onClose={() => {
-            setIsEntryEditDrawerVisible(false);
-            setSelectedEntry(null);
-            setSelectedActivityId(undefined);
-            setSelectedCompletionDate(undefined);
+            setIsTaskEditDrawerVisible(false);
+            setSelectedActivity(null);
           }}
-          entry={selectedEntry}
-          activityId={selectedActivityId}
-          completionDate={selectedCompletionDate}
-          onEntryUpdated={handleEntryUpdated}
+          activity={selectedActivity}
+          entry={entriesMap.get(selectedActivity.entryId) || null}
+          onUpdateComplete={() => {
+            loadScheduledActivities(selectedDate);
+          }}
         />
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        visible={confirmationModal.visible}
+        onClose={() => setConfirmationModal(prev => ({ ...prev, visible: false }))}
+        title={confirmationModal.title}
+        message={confirmationModal.message}
+        onConfirm={confirmationModal.onConfirm}
+        isDangerous={confirmationModal.isDangerous}
+      />
     </View>
   );
 };
@@ -739,6 +1005,12 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,    
     ...shadows.sm, // Use style guide shadow instead of custom platform logic
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.56)', // or adjust for your opacity/color
+    zIndex: 0,
   },
   headerTop: {
     flexDirection: 'row',
@@ -857,8 +1129,10 @@ const styles = StyleSheet.create({
     ...shadows.sm, // Use style guide shadow instead of custom platform logic
   },
   pastTaskCard: {
-    backgroundColor: '#F8F9FA',
-    opacity: 0.85,
+    backgroundColor: '#F3F4F6',
+    opacity: 0.8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   taskContent: {
     flexDirection: 'row',
@@ -883,12 +1157,13 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   categoryIconContainer: {
-    width: 36,
-    height: 36,
+    width: 24,
+    height: 24,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 0,
+    marginBottom: 6,
   },
   taskInfo: {
     flex: 1,
@@ -911,9 +1186,10 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   taskType: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontStyle: 'italic',
+    fontSize: 13,
+    color: '#059669',
+    fontWeight: '500',
+    marginTop: 2,
   },
   pastTaskType: {
     color: '#6B7280',
@@ -995,6 +1271,110 @@ const styles = StyleSheet.create({
     backgroundColor: '#E5E7EB',
     shadowOpacity: 0,
     elevation: 0,
+  },
+  taskCardContainer: {
+    zIndex: 1,
+    backgroundColor: 'transparent',
+  },
+  taskCardWrapper: {
+    position: 'relative',
+  },
+  swipeableContainer: {
+    overflow: 'hidden',
+    borderRadius: 20,
+    marginBottom: 12,
+    position: 'relative',
+  },
+  swipeAction: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 120,
+    zIndex: 0,
+  },
+  deleteAction: {
+    left: 0,
+    backgroundColor: '#EF4444',
+    borderTopLeftRadius: 20,
+    borderBottomLeftRadius: 20,
+  },
+  completeAction: {
+    right: 0,
+    backgroundColor: '#10B981',
+    borderTopRightRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  actionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  noTasksMessage: {
+    alignItems: 'center',
+    paddingVertical: 50,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 20,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    ...shadows.sm,
+  },
+  noTasksText: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+    zIndex: 999,
+  },
+  loadingSpinner: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#C49AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pastTaskOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)', // Semi-transparent overlay
+    borderRadius: 20,
+    zIndex: 1, // Ensure it's above the card content
+  },
+  taskDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+    marginHorizontal: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  dividerText: {
+    marginHorizontal: 10,
+    color: '#6B7280',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 

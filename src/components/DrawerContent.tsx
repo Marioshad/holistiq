@@ -19,6 +19,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import UserService from '../services/UserService';
 import { UserProfile } from '../types';
+import { ENABLE_DEV_SCREENS } from '@env';
 
 interface DrawerContentProps extends DrawerContentComponentProps {
   onLogout: () => void;
@@ -128,34 +129,27 @@ const DrawerContent: React.FC<DrawerContentProps> = ({ navigation, onLogout, ...
           <Divider />
 
           {/* Development Section */}
-          <Drawer.Section title="Development" style={styles.developmentSection}>
-            <DrawerItem
-              icon={({ color, size }) => (
-                <MaterialIcons name="build" color={color} size={size} />
-              )}
-              label="Form Components"
-              onPress={() => navigation.navigate('FormComponents')}
-              focused={props.state.index === 5}
-            />
+          {ENABLE_DEV_SCREENS === 'true' && (
+            <Drawer.Section title="Development" style={styles.developmentSection}>
+              <DrawerItem
+                icon={({ color, size }) => (
+                  <MaterialIcons name="bug-report" color={color} size={size} />
+                )}
+                label="Firebase Debug"
+                onPress={() => navigation.navigate('AuthDebug')}
+                focused={props.state.index === 5}
+              />
 
-            <DrawerItem
-              icon={({ color, size }) => (
-                <MaterialIcons name="palette" color={color} size={size} />
-              )}
-              label="Style Guide"
-              onPress={() => navigation.navigate('StyleGuide')}
-              focused={props.state.index === 6}
-            />
-
-            <DrawerItem
-              icon={({ color, size }) => (
-                <MaterialIcons name="bug-report" color={color} size={size} />
-              )}
-              label="Firebase Debug"
-              onPress={() => navigation.navigate('AuthDebug')}
-              focused={props.state.index === 7}
-            />
-          </Drawer.Section>
+              <DrawerItem
+                icon={({ color, size }) => (
+                  <MaterialIcons name="notifications-active" color={color} size={size} />
+                )}
+                label="Notification Test"
+                onPress={() => navigation.navigate('NotificationTest')}
+                focused={props.state.index === 6}
+              />
+            </Drawer.Section>
+          )}
 
           <Divider />
 
@@ -168,7 +162,6 @@ const DrawerContent: React.FC<DrawerContentProps> = ({ navigation, onLogout, ...
               label="Backup Data"
               onPress={() => {
                 // Handle backup
-                console.log('Backup pressed');
               }}
             />
 
@@ -179,7 +172,6 @@ const DrawerContent: React.FC<DrawerContentProps> = ({ navigation, onLogout, ...
               label="Help & Support"
               onPress={() => {
                 // Handle help
-                console.log('Help pressed');
               }}
             />
           </Drawer.Section>

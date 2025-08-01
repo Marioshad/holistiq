@@ -17,6 +17,8 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 import { ScheduledActivity, DailySchedule, Entry } from '../types';
+import NotificationService from './NotificationService';
+import EntryService from './EntryService';
 
 class ScheduleService {
   // Get current user ID with fallback
@@ -35,8 +37,45 @@ class ScheduleService {
   }
 
   // Convert Firestore timestamp to ISO string
-  private timestampToISO(timestamp: Timestamp | null): string {
-    return timestamp ? timestamp.toDate().toISOString() : new Date().toISOString();
+  private timestampToISO(timestamp: Timestamp | Date | string | null | undefined): string {
+    try {
+      if (!timestamp) {
+        return new Date().toISOString();
+      }
+      
+      // If it's already a string, return it
+      if (typeof timestamp === 'string') {
+        return timestamp;
+      }
+      
+      // If it's a Firestore Timestamp, convert to Date
+      if (timestamp && typeof timestamp === 'object' && 'toDate' in timestamp) {
+        const firestoreTimestamp = timestamp as Timestamp;
+        if (firestoreTimestamp.toDate && typeof firestoreTimestamp.toDate === 'function') {
+          return firestoreTimestamp.toDate().toISOString();
+        }
+      }
+      
+      // If it's a Date object, convert to ISO string
+      if (timestamp instanceof Date) {
+        return timestamp.toISOString();
+      }
+      
+      // Handle Firestore Timestamp objects that might not have toDate method
+      if (timestamp && typeof timestamp === 'object' && timestamp.seconds !== undefined) {
+        // This is a Firestore Timestamp with seconds/nanoseconds
+        const seconds = timestamp.seconds;
+        const nanoseconds = timestamp.nanoseconds || 0;
+        const date = new Date(seconds * 1000 + nanoseconds / 1000000);
+        return date.toISOString();
+      }
+      
+      // Fallback to current date
+      return new Date().toISOString();
+    } catch (error) {
+      console.error('Error in timestampToISO:', error, 'Timestamp:', timestamp, 'Type:', typeof timestamp);
+      return new Date().toISOString();
+    }
   }
 
   // Convert ISO string to Firestore timestamp
@@ -48,27 +87,50 @@ class ScheduleService {
   private docToScheduledActivity(doc: QueryDocumentSnapshot<DocumentData>): ScheduledActivity {
     const data = doc.data();
     
-    // Debug logging
-    console.log('Converting Firestore doc to ScheduledActivity:', {
-      docId: doc.id,
-      data: JSON.stringify(data, null, 2)
-    });
-    
-    const activity = {
-      id: doc.id,
-      entryId: data.entryId,
-      startDate: data.startDate,
-      endDate: data.endDate,
-      time: data.time,
-      completed: data.completed || false,
-      completedAt: data.completedAt ? this.timestampToISO(data.completedAt) : undefined,
-      note: data.note,
-      createdAt: this.timestampToISO(data.createdAt),
-      updatedAt: this.timestampToISO(data.updatedAt),
-    } as ScheduledActivity;
-    
-    console.log('Converted ScheduledActivity:', JSON.stringify(activity, null, 2));
-    return activity;
+    try {
+      // Log the timestamp data for debugging
+      if (__DEV__) {
+        console.log('Scheduled Activity timestamps:', {
+          docId: doc.id,
+          createdAt: data.createdAt,
+          createdAtType: typeof data.createdAt,
+          updatedAt: data.updatedAt,
+          updatedAtType: typeof data.updatedAt,
+          completedAt: data.completedAt,
+          completedAtType: typeof data.completedAt,
+        });
+      }
+      
+      const activity = {
+        id: doc.id,
+        entryId: data.entryId,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        time: data.time,
+        completed: data.completed || false,
+        completedAt: data.completedAt ? this.timestampToISO(data.completedAt) : undefined,
+        note: data.note,
+        createdAt: this.timestampToISO(data.createdAt),
+        updatedAt: this.timestampToISO(data.updatedAt),
+      } as ScheduledActivity;
+      
+      return activity;
+    } catch (error) {
+      console.error('Error converting document to ScheduledActivity:', error, 'Document ID:', doc.id, 'Data:', data);
+      // Return a fallback activity with current timestamps
+      return {
+        id: doc.id,
+        entryId: data?.entryId || '',
+        startDate: data?.startDate || new Date().toISOString(),
+        endDate: data?.endDate,
+        time: data?.time || '',
+        completed: data?.completed || false,
+        completedAt: data?.completedAt ? this.timestampToISO(data.completedAt) : undefined,
+        note: data?.note,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as ScheduledActivity;
+    }
   }
 
   // Convert ScheduledActivity object to Firestore document data
@@ -105,21 +167,24 @@ class ScheduleService {
     try {
       const currentUserId = userId || this.getCurrentUserId();
       if (!currentUserId) {
-        console.warn('No user ID provided and no authenticated user');
         return [];
       }
 
-      console.log(`Getting all scheduled activities for userId: ${currentUserId}`);
-
       const activitiesRef = this.getUserScheduledActivitiesCollection(currentUserId);
-      const q = query(activitiesRef, orderBy('updatedAt', 'desc'));
-      const querySnapshot = await getDocs(q);
       
-      console.log(`Found ${querySnapshot.docs.length} scheduled activities`);
+      // Try ordered query first, fallback to simple query if index is missing
+      let querySnapshot;
+      try {
+        // Try with ordering
+        const q = query(activitiesRef, orderBy('updatedAt', 'desc'));
+        querySnapshot = await getDocs(q);
+      } catch (orderError) {
+        console.warn('OrderBy failed, trying simple query:', orderError);
+        // Fallback to simple query without ordering
+        querySnapshot = await getDocs(activitiesRef);
+      }
       
       const activities = querySnapshot.docs.map(doc => this.docToScheduledActivity(doc));
-      console.log(`Converted ${activities.length} scheduled activities`);
-      
       return activities;
     } catch (error) {
       console.error('Error getting scheduled activities:', error);
@@ -132,11 +197,8 @@ class ScheduleService {
     try {
       const currentUserId = userId || this.getCurrentUserId();
       if (!currentUserId) {
-        console.warn('No user ID provided and no authenticated user');
         return [];
       }
-
-      console.log(`Getting activities for date: ${date}, userId: ${currentUserId}`);
 
       const allActivities = await this.getAllScheduledActivities(currentUserId);
       const filteredActivities = allActivities.filter(activity => {
@@ -147,7 +209,6 @@ class ScheduleService {
         return targetDate >= activityStart && targetDate <= activityEnd;
       });
 
-      console.log(`Found ${filteredActivities.length} activities for date ${date}`);
       return filteredActivities;
     } catch (error) {
       console.error('Error getting activities for date:', error);
@@ -160,11 +221,8 @@ class ScheduleService {
     try {
       const currentUserId = userId || this.getCurrentUserId();
       if (!currentUserId) {
-        console.warn('No user ID provided and no authenticated user');
         return [];
       }
-
-      console.log(`Getting activities for date range: ${startDate} to ${endDate}, userId: ${currentUserId}`);
 
       const allActivities = await this.getAllScheduledActivities(currentUserId);
       const start = new Date(startDate);
@@ -178,7 +236,6 @@ class ScheduleService {
         return (activityStart <= end && activityEnd >= start);
       });
 
-      console.log(`Found ${filteredActivities.length} activities for date range ${startDate} to ${endDate}`);
       return filteredActivities;
     } catch (error) {
       console.error('Error getting activities for date range:', error);
@@ -212,15 +269,17 @@ class ScheduleService {
       const activitiesRef = this.getUserScheduledActivitiesCollection(userId);
       const docData = this.scheduledActivityToDocData(newActivity);
       
-      // Log the cleaned data for debugging
-      console.log('Scheduling activity with data:', JSON.stringify(docData, null, 2));
-      
       const docRef = await addDoc(activitiesRef, docData);
       
       // Get the created document to return with proper timestamps
       const createdDoc = await getDoc(docRef);
       if (createdDoc.exists()) {
-        return this.docToScheduledActivity(createdDoc as QueryDocumentSnapshot<DocumentData>);
+        const scheduledActivity = this.docToScheduledActivity(createdDoc as QueryDocumentSnapshot<DocumentData>);
+        
+        // Schedule notification for this activity (non-blocking)
+        this.scheduleNotificationAsync(scheduledActivity, userId);
+        
+        return scheduledActivity;
       }
       
       throw new Error('Failed to create scheduled activity');
@@ -295,6 +354,14 @@ class ScheduleService {
       }
 
       await deleteDoc(activityRef);
+      
+      // Cancel notifications for this activity
+      try {
+        await NotificationService.cancelActivityNotifications(activityId);
+      } catch (notificationError) {
+        console.warn('Failed to cancel notifications for deleted activity:', notificationError);
+      }
+      
       return true;
     } catch (error) {
       console.error('Error deleting scheduled activity:', error);
@@ -347,7 +414,6 @@ class ScheduleService {
     try {
       const currentUserId = userId || this.getCurrentUserId();
       if (!currentUserId) {
-        console.warn('No user ID provided and no authenticated user');
         return {
           totalActivities: 0,
           completedActivities: 0,
@@ -430,34 +496,43 @@ class ScheduleService {
     }
   }
 
-  // Debug method to test data retrieval
-  async debugGetAllScheduledActivities(userId?: string): Promise<void> {
+
+
+  // Get entry details for notifications
+  private async getEntryDetails(entryId: string, userId: string): Promise<Entry | null> {
     try {
-      const currentUserId = userId || this.getCurrentUserId();
-      if (!currentUserId) {
-        console.warn('No user ID provided and no authenticated user');
-        return;
-      }
-
-      console.log('=== DEBUG: Getting all scheduled activities ===');
-      console.log('User ID:', currentUserId);
-
-      const activitiesRef = this.getUserScheduledActivitiesCollection(currentUserId);
-      const querySnapshot = await getDocs(activitiesRef);
-      
-      console.log(`Total scheduled activities found: ${querySnapshot.docs.length}`);
-      
-      querySnapshot.docs.forEach((doc, index) => {
-        console.log(`Scheduled Activity ${index + 1}:`, {
-          id: doc.id,
-          data: doc.data()
-        });
-      });
-      
-      console.log('=== END DEBUG ===');
+      return await EntryService.getEntryById(entryId, userId);
     } catch (error) {
-      console.error('Debug error:', error);
+      console.error('Error getting entry details:', error);
+      return null;
     }
+  }
+
+  // Schedule notification asynchronously (non-blocking)
+  private scheduleNotificationAsync(scheduledActivity: ScheduledActivity, userId: string): void {
+    // Use setTimeout to make this non-blocking
+    setTimeout(async () => {
+      try {
+        // Get the entry details for notification
+        const entry = await this.getEntryDetails(scheduledActivity.entryId, userId);
+        if (entry) {
+          if (scheduledActivity.endDate && scheduledActivity.endDate !== scheduledActivity.startDate) {
+            // Recurring activity - schedule multiple notifications
+            await NotificationService.scheduleRecurringActivityNotifications(
+              scheduledActivity,
+              entry.title,
+              scheduledActivity.endDate
+            );
+          } else {
+            // Single activity - schedule one notification
+            await NotificationService.scheduleActivityNotification(scheduledActivity, entry.title);
+          }
+        }
+      } catch (notificationError) {
+        console.warn('Failed to schedule notification for activity:', notificationError);
+        // Don't fail the activity creation if notification fails
+      }
+    }, 0);
   }
 
   // Legacy method for backward compatibility (without userId parameter)

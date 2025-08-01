@@ -212,9 +212,8 @@ export type DrawerParamList = {
   Profile: undefined;
   About: undefined;
   EntryManagement: undefined;
-  FormComponents: undefined; // Development only
-  StyleGuide: undefined; // Development only
-  AuthDebug: undefined; // Development only - Firebase debugging
+  AuthDebug?: undefined; // Development only - Firebase debugging - optional
+  NotificationTest?: undefined; // Development only - Notification testing - optional
 };
 
 export type MainTabParamList = {

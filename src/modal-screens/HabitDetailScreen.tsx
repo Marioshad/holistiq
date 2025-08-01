@@ -311,14 +311,13 @@ const HabitDetailScreen: React.FC = () => {
         </Card>
 
         {/* Save Button */}
-        <Button
-          mode="contained"
-          onPress={saveTaskData}
+        <TouchableOpacity
           style={styles.saveButton}
-          labelStyle={styles.saveButtonText}
+          onPress={saveTaskData}
         >
-          Save Task
-        </Button>
+          <MaterialIcons name="save" size={16} color="#FFFFFF" />
+          <Text style={styles.saveButtonText}>Save Task</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -526,16 +525,22 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   saveButton: {
-    backgroundColor: '#2563EB',
-    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgb(138, 101, 243)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
     marginTop: 8,
     marginBottom: 32,
-    ...shadows.lg, // Use style guide shadow instead of custom platform logic
+    gap: 8,
+    ...shadows.md,
   },
   saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    paddingVertical: 8,
+    color: '#FFFFFF',
   },
 });
 

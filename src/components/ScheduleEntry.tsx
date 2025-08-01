@@ -90,7 +90,7 @@ interface ScheduleRecordBottomSheetProps {
   onScheduleComplete?: () => void;
 }
 
-const ScheduleRecordBottomSheet: React.FC<ScheduleRecordBottomSheetProps> = ({
+const ScheduleEntry: React.FC<ScheduleRecordBottomSheetProps> = ({
   isVisible,
   onClose,
   selectedDate,
@@ -510,6 +510,8 @@ const ScheduleRecordBottomSheet: React.FC<ScheduleRecordBottomSheetProps> = ({
           contentContainerStyle={styles.categoriesList}
           columnWrapperStyle={{ gap: 10 }}
           showsVerticalScrollIndicator={false}
+          scrollEnabled={false}
+          nestedScrollEnabled={true}
         />
       </View>
     </View>
@@ -560,6 +562,8 @@ const ScheduleRecordBottomSheet: React.FC<ScheduleRecordBottomSheetProps> = ({
         )}
         style={styles.recordsList}
         showsVerticalScrollIndicator={false}
+        scrollEnabled={false}
+        nestedScrollEnabled={true}
       />
 
       {filteredEntries.length === 0 && !isLoading && (
@@ -676,16 +680,12 @@ const ScheduleRecordBottomSheet: React.FC<ScheduleRecordBottomSheetProps> = ({
     }
   };
 
-  // Add debug logging
-  console.log('ScheduleRecordBottomSheet isVisible:', isVisible);
-
   if (!isVisible) {
     return null;
   }
 
   return (
     <View style={[styles.modalOverlay, { display: isVisible ? 'flex' : 'none' }]}>
-      <DebugOverlay filename="ScheduleRecordBottomSheet.tsx" type="component" />
       
       {/* Animated backdrop */}
       <Animated.View 
@@ -740,6 +740,7 @@ const ScheduleRecordBottomSheet: React.FC<ScheduleRecordBottomSheetProps> = ({
               showsVerticalScrollIndicator={false}
               bounces={false}
               keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled={true}
             >
               {renderContent()}
             </ScrollView>
@@ -1103,4 +1104,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ScheduleRecordBottomSheet; 
+export default ScheduleEntry; 

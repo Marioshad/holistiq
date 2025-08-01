@@ -72,11 +72,9 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
   };
 
   const handleResendVerification = async () => {
-    console.log('Resend Verification button pressed');
     setIsLoading(true);
     try {
       const result = await UserService.sendEmailVerification();
-      console.log('sendEmailVerification result:', result);
       if (result.success) {
         showSuccess(result.message);
         setVerificationCooldown(60); // Start 60 second cooldown
@@ -91,7 +89,6 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
         Alert.alert('Error', result.message);
       }
     } catch (error) {
-      console.log('Error in sendEmailVerification:', error);
       Alert.alert('Error', 'Failed to send verification email');
     } finally {
       setIsLoading(false);
@@ -105,7 +102,6 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
 
   // Log when the resend button's disabled state changes
   useEffect(() => {
-    console.log('Resend button rendered. Disabled:', isLoading || verificationCooldown > 0);
   }, [isLoading, verificationCooldown]);
 
   if (verificationStatus === 'success') {
@@ -141,7 +137,6 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
             onPress={handleResendVerification} 
             disabled={isLoading || verificationCooldown > 0}
           >
-            {console.log('Resend button rendered. Disabled:', isLoading || verificationCooldown > 0)}
             <Text style={styles.primaryButtonText}>
               {isLoading ? 'Sending...' : 
                verificationCooldown > 0 ? `Wait ${verificationCooldown}s` : 
@@ -213,7 +208,6 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
             onPress={handleResendVerification}
             disabled={isLoading || verificationCooldown > 0}
           >
-            {console.log('Resend button rendered. Disabled:', isLoading || verificationCooldown > 0)}
             <Text style={styles.primaryButtonText}>
               {isLoading ? 'Sending...' : 
                verificationCooldown > 0 ? `Wait ${verificationCooldown}s` : 

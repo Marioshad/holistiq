@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { Card, Title, List, Switch, Button, TextInput, Divider } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import UserService from '../../services/UserService';
+import NotificationService from '../../services/NotificationService';
 import { UserProfile } from '../../types';
 
 interface SettingsScreenProps {
@@ -13,6 +14,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [notificationEnabled, setNotificationEnabled] = useState(false);
   
   // Password change form
   const [currentPassword, setCurrentPassword] = useState('');
@@ -198,6 +200,31 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
               description={user.preferences.reminderTime}
               left={props => <List.Icon {...props} icon="clock" />}
               onPress={() => Alert.alert('Coming Soon', 'Time picker will be available in the next update')}
+            />
+
+            <List.Item
+              title="Push Notifications"
+              description="Get notified about scheduled activities"
+              left={props => <List.Icon {...props} icon="notifications" />}
+              right={() => (
+                <Switch
+                  value={notificationEnabled}
+                  onValueChange={async (value) => {
+                    if (value) {
+                      try {
+                        const status = await NotificationService.requestPermissions();
+                        setNotificationEnabled(true);
+                        Alert.alert('Success', 'Notifications enabled!');
+                      } catch (error) {
+                        Alert.alert('Error', 'Failed to request notification permissions');
+                      }
+                    } else {
+                      setNotificationEnabled(false);
+                      Alert.alert('Info', 'Notifications disabled. You can re-enable them anytime.');
+                    }
+                  }}
+                />
+              )}
             />
           </Card.Content>
         </Card>

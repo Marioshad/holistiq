@@ -99,10 +99,11 @@ const Toast: React.FC<ToastProps> = ({
     });
   };
 
-  if (!visible) return null;
+  // Restore visibility logic
+  if (!visible) {
+    return null;
+  }
   const config = typeConfig[type] || typeConfig.success;
-
-  if (visible) console.log('Toast visible:', type, message);
 
   return (
     <Animated.View
@@ -119,7 +120,7 @@ const Toast: React.FC<ToastProps> = ({
         <View style={styles.iconContainer}>
           <MaterialIcons name={config.icon as any} size={24} color={config.iconColor} />
         </View>
-        <Text style={styles.message}>{message}</Text>
+        <Text style={[styles.message, { color: config.iconColor }]}>{message}</Text>
         <TouchableOpacity style={styles.closeButton} onPress={hideToast}>
           <MaterialIcons name="close" size={20} color={config.iconColor} />
         </TouchableOpacity>
@@ -133,13 +134,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: spacing.md,
     right: spacing.md,
-    zIndex: 1000,
+    zIndex: 9999, // Very high z-index to ensure it's on top
   },
   top: {
     top: 60, // Account for status bar
   },
   bottom: {
-    bottom: 40, // Account for safe area
+    bottom: 100, // Increased from 40 to 100 to be more visible
   },
   toast: {
     backgroundColor: colors.success,
@@ -148,7 +149,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
-    height:  65,
+    height: 65,
     ...shadows.lg,
   },
   iconContainer: {

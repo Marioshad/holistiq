@@ -123,12 +123,6 @@ const FormPicker: React.FC<FormPickerProps> = ({
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{label || 'Select Option'}</Text>
-              <TouchableOpacity 
-                style={styles.closeButton}
-                onPress={() => setIsVisible(false)}
-              >
-                <MaterialIcons name="close" size={24} color={colors.primary} />
-              </TouchableOpacity>
             </View>
             
             <FlatList
@@ -222,7 +216,8 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: modalStyles.backdrop.backgroundColor,
   },
   modalBackdrop: {
@@ -234,33 +229,30 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: colors.card,
-    borderTopLeftRadius: borderRadius['2xl'],
-    borderTopRightRadius: borderRadius['2xl'],
-    maxHeight: '70%',
+    borderRadius: borderRadius['2xl'],
+    width: '80%',
+    maxWidth: 400,
+    maxHeight: '60%',
+    paddingBottom: spacing.lg,
     ...shadows.xl,
   },
   modalHeader: {
-    flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    paddingBottom: spacing.lg,
+    justifyContent: 'center' as const,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   modalTitle: {
-    ...modalStyles.title,
-  },
-  closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.xl,
-    backgroundColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.sm,
+    fontSize: typography.lg,
+    fontWeight: typography.semibold,
+    color: colors.text,
+    textAlign: 'center',
+    letterSpacing: typography.letterWide,
   },
   optionsList: {
-    maxHeight: 400,
+    maxHeight: 300,
   },
   optionItem: {
     flexDirection: 'row',

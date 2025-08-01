@@ -12,6 +12,8 @@ import {
 } from 'firebase/auth';
 import { auth } from '../../firebase';
 import { UserProfile } from '../types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import AuthPersistenceService from './AuthPersistenceService';
 
 export class UserService {
   private static currentUser: UserProfile | null = null;
@@ -20,21 +22,11 @@ export class UserService {
   // Authentication methods
   static async register(name: string, email: string, password: string): Promise<{ success: boolean; message: string; user?: UserProfile }> {
     try {
-      console.log('🔥 Starting Firebase registration for:', email);
-      console.log('🔥 Firebase config projectId:', 'holistiq-app');
-      console.log('🔥 Firebase auth instance:', auth ? 'Initialized' : 'Not initialized');
-      
       const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
       const firebaseUser = userCredential.user;
       
-      console.log('🔥 Firebase user created successfully!');
-      console.log('🔥 Firebase UID:', firebaseUser.uid);
-      console.log('🔥 Firebase email:', firebaseUser.email);
-      console.log('🔥 Firebase emailVerified:', firebaseUser.emailVerified);
-      
       // Send email verification
       await sendEmailVerification(firebaseUser);
-      console.log('🔥 Email verification sent to:', firebaseUser.email);
       
       // Create user profile but DON'T set as current user yet
       const newUser: UserProfile = {
@@ -49,24 +41,17 @@ export class UserService {
         },
       };
 
-      console.log('🔥 Created user profile:', newUser);
-      
       // Set as current user
       this.currentUser = newUser;
       this.notifyAuthStateListeners(newUser);
 
-      console.log('🔥 Registration completed successfully!');
       return { 
         success: true, 
         message: 'Registration successful! Please check your email to verify your account before signing in.', 
         user: newUser 
       };
     } catch (error) {
-      console.error('🔥 Firebase registration error:', error);
       const authError = error as AuthError;
-      
-      console.log('🔥 Firebase error code:', authError.code);
-      console.log('🔥 Firebase error message:', authError.message);
       
       // Handle Firebase Auth errors
       switch (authError.code) {
@@ -110,20 +95,11 @@ export class UserService {
         };
       }
 
-      console.log('🔥 Attempting Firebase login for:', email.toLowerCase());
-      console.log('🔥 Firebase auth instance:', auth ? 'Initialized' : 'Not initialized');
-
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
       const firebaseUser = userCredential.user;
       
-      console.log('🔥 Firebase login successful!');
-      console.log('🔥 Firebase UID:', firebaseUser.uid);
-      console.log('🔥 Firebase email:', firebaseUser.email);
-      console.log('🔥 Firebase emailVerified:', firebaseUser.emailVerified);
-      
       // Check if email is verified
       if (!firebaseUser.emailVerified) {
-        console.log('🔥 User email not verified');
         return { 
           success: false, 
           message: 'Please verify your email address before signing in. You can request a new verification email from the login screen.',
@@ -144,19 +120,13 @@ export class UserService {
         },
       };
 
-      console.log('🔥 Created user profile from Firebase:', userProfile);
-
       // Set as current user
       this.currentUser = userProfile;
       this.notifyAuthStateListeners(userProfile);
 
       return { success: true, message: 'Login successful! Welcome back.', user: userProfile };
     } catch (error) {
-      console.error('🔥 Firebase login error:', error);
       const authError = error as AuthError;
-      
-      console.log('🔥 Firebase error code:', authError.code);
-      console.log('🔥 Firebase error message:', authError.message);
       
       // Handle Firebase Auth errors
       switch (authError.code) {
@@ -211,13 +181,57 @@ export class UserService {
 
   static async logout(): Promise<boolean> {
     try {
+      if (__DEV__) {
+        console.log('UserService: Logging out user');
+      }
+      
+      // Sign out from Firebase Auth
       await signOut(auth);
+      
+      // Clear current user
       this.currentUser = null;
+      
+      // Clear cached user profile
+      await this.clearCachedUserProfile();
+      
+      // Notify listeners
       this.notifyAuthStateListeners(null);
+      
+      if (__DEV__) {
+        console.log('UserService: Logout completed successfully');
+      }
+      
       return true;
     } catch (error) {
-      console.error('Firebase logout error:', error);
+      console.error('Error during logout:', error);
       return false;
+    }
+  }
+
+  // Clear all authentication data (useful for debugging emulator issues)
+  static async clearAllAuthData(): Promise<void> {
+    try {
+      if (__DEV__) {
+        console.log('UserService: Clearing all authentication data');
+      }
+      
+      // Clear current user
+      this.currentUser = null;
+      
+      // Clear cached user profile
+      await this.clearCachedUserProfile();
+      
+      // Clear any other auth-related data
+      await AsyncStorage.removeItem('cachedUserProfile');
+      
+      // Notify listeners
+      this.notifyAuthStateListeners(null);
+      
+      if (__DEV__) {
+        console.log('UserService: All authentication data cleared');
+      }
+    } catch (error) {
+      console.error('Error clearing auth data:', error);
     }
   }
 
@@ -257,21 +271,23 @@ export class UserService {
 
   // Initialize Firebase Auth state listener
   static initializeAuthStateListener(): void {
-    console.log('🔥 Initializing Firebase Auth state listener...');
-    onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
-      console.log('🔥 Firebase Auth state changed:', firebaseUser ? 'User signed in' : 'User signed out');
+    if (__DEV__) {
+      console.log('UserService: Initializing auth state listener');
+    }
+    
+    onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      if (__DEV__) {
+        console.log('UserService: Firebase auth state changed:', {
+          hasUser: !!firebaseUser,
+          userId: firebaseUser?.uid,
+          email: firebaseUser?.email,
+          emailVerified: firebaseUser?.emailVerified,
+          timestamp: new Date().toISOString()
+        });
+      }
       
       if (firebaseUser) {
         // User is signed in - check if email is verified
-        console.log('🔥 Firebase user details:', {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          emailVerified: firebaseUser.emailVerified
-        });
-        
-        // Only set as current user if email is verified
-        // Option 1: Do NOT sign out unverified users. Always set currentUser and notify listeners.
         const userProfile: UserProfile = {
           id: firebaseUser.uid,
           name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
@@ -285,16 +301,114 @@ export class UserService {
           // Add emailVerified property for app logic
           emailVerified: firebaseUser.emailVerified,
         } as UserProfile & { emailVerified: boolean };
+        
         this.currentUser = userProfile;
         this.notifyAuthStateListeners(userProfile);
-        console.log('🔥 User profile set from Firebase Auth state:', userProfile);
+        
+        // Cache the user profile and save to persistence
+        this.cacheUserProfile(userProfile);
+        await AuthPersistenceService.saveUser(firebaseUser);
+        
+        if (__DEV__) {
+          console.log('UserService: User signed in and cached:', {
+            id: userProfile.id,
+            email: userProfile.email,
+            name: userProfile.name
+          });
+        }
       } else {
         // User is signed out
         this.currentUser = null;
         this.notifyAuthStateListeners(null);
-        console.log('🔥 User signed out, cleared current user');
+        
+        // Clear cached user profile and persistence
+        this.clearCachedUserProfile();
+        await AuthPersistenceService.clearSavedUser();
+        
+        if (__DEV__) {
+          console.log('UserService: User signed out and cache cleared');
+        }
       }
     });
+  }
+
+  // Cache user profile to AsyncStorage
+  private static async cacheUserProfile(userProfile: UserProfile): Promise<void> {
+    try {
+      await AsyncStorage.setItem('cachedUserProfile', JSON.stringify(userProfile));
+    } catch (error) {
+      console.warn('Failed to cache user profile:', error);
+    }
+  }
+
+  // Clear cached user profile
+  private static async clearCachedUserProfile(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem('cachedUserProfile');
+    } catch (error) {
+      console.warn('Failed to clear cached user profile:', error);
+    }
+  }
+
+  // Get cached user profile
+  static async getCachedUserProfile(): Promise<UserProfile | null> {
+    try {
+      const cached = await AsyncStorage.getItem('cachedUserProfile');
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (error) {
+      console.warn('Failed to get cached user profile:', error);
+    }
+    return null;
+  }
+
+  // Check for saved authentication state
+  static async checkSavedAuthState(): Promise<UserProfile | null> {
+    try {
+      const savedUser = await AuthPersistenceService.getSavedUser();
+      if (savedUser && await AuthPersistenceService.isUserAuthenticated()) {
+        // Create a user profile from saved data
+        const userProfile: UserProfile = {
+          id: savedUser.uid,
+          name: savedUser.displayName || savedUser.email?.split('@')[0] || 'User',
+          email: savedUser.email || '',
+          createdAt: savedUser.creationTime || new Date().toISOString(),
+          preferences: {
+            notifications: true,
+            theme: 'light',
+            reminderTime: '09:00',
+          },
+          emailVerified: savedUser.emailVerified,
+        } as UserProfile & { emailVerified: boolean };
+
+        this.currentUser = userProfile;
+        this.notifyAuthStateListeners(userProfile);
+        
+        if (__DEV__) {
+          console.log('UserService: Restored user from persistence:', {
+            id: userProfile.id,
+            email: userProfile.email,
+            name: userProfile.name,
+            source: 'checkSavedAuthState',
+            timestamp: new Date().toISOString()
+          });
+        }
+        
+        return userProfile;
+      } else {
+        if (__DEV__) {
+          console.log('UserService: No valid saved auth state found:', {
+            hasSavedUser: !!savedUser,
+            isAuthenticated: savedUser ? await AuthPersistenceService.isUserAuthenticated() : false,
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to check saved auth state:', error);
+    }
+    return null;
   }
 
   private static notifyAuthStateListeners(user: UserProfile | null): void {
@@ -383,7 +497,6 @@ export class UserService {
       await sendEmailVerification(currentUser);
       return { success: true, message: 'Verification email sent successfully' };
     } catch (error) {
-      console.error('Error sending email verification:', error);
       const authError = error as AuthError;
       
       switch (authError.code) {
@@ -408,7 +521,6 @@ export class UserService {
       await applyActionCode(auth, actionCode);
       return { success: true, message: 'Email verified successfully! You can now sign in.' };
     } catch (error) {
-      console.error('Error verifying email:', error);
       const authError = error as AuthError;
       
       switch (authError.code) {
@@ -452,7 +564,6 @@ export class UserService {
       await sendPasswordResetEmail(auth, trimmedEmail);
       return { success: true, message: 'Password reset email sent successfully' };
     } catch (error) {
-      console.error('Error sending password reset email:', error);
       const authError = error as AuthError;
       
       switch (authError.code) {
@@ -485,7 +596,6 @@ export class UserService {
       await confirmPasswordReset(auth, actionCode, newPassword);
       return { success: true, message: 'Password reset successfully! You can now sign in with your new password.' };
     } catch (error) {
-      console.error('Error confirming password reset:', error);
       const authError = error as AuthError;
       
       switch (authError.code) {
@@ -550,7 +660,6 @@ export class UserService {
       // Clear rate limiting data
       this.lastVerificationRequest = {};
       this.lastPasswordResetRequest = {};
-      console.log('Firebase Auth data cleared');
       return true;
     } catch (error) {
       console.error('Error clearing Firebase Auth data:', error);

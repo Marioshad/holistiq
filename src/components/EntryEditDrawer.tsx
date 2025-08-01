@@ -19,6 +19,7 @@ import DebugOverlay from './DebugOverlay';
 import { Entry, ScheduledActivity } from '../types';
 import EntryService from '../services/EntryService';
 import { auth } from '../../firebase';
+import { shadows } from '../styles/styleGuide';
 
 interface EntryEditDrawerProps {
   isVisible: boolean;
@@ -297,6 +298,7 @@ const EntryEditDrawer: React.FC<EntryEditDrawerProps> = ({
                 onPress={handleSave}
                 disabled={isLoading}
               >
+                <MaterialIcons name="save" size={16} color="#FFFFFF" />
                 <Text style={styles.saveButtonText}>Save</Text>
               </TouchableOpacity>
             </View>
@@ -491,15 +493,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   saveButton: {
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    elevation: 2,
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgb(138, 101, 243)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 8,
+    gap: 8,
+    ...shadows.md,
   },
   saveButtonDisabled: {
     backgroundColor: '#9CA3AF',

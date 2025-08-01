@@ -22,5 +22,8 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
+// Initialize Auth - Firebase will use memory persistence by default in React Native
+// This is the safest approach for Expo apps
 export const auth = getAuth(app);
 export const db = getFirestore(app);

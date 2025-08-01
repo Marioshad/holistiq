@@ -3,12 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   Alert,
   KeyboardAvoidingView,
   Platform,
   Modal,
   TouchableOpacity,
+  FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
@@ -20,6 +21,7 @@ import { FormInput, FormPicker, FormButton } from '../components/forms';
 import DebugOverlay from '../components/DebugOverlay';
 import UserService from '../services/UserService';
 import { auth } from '../../firebase';
+import { typography, colors } from '../styles/styleGuide';
 
 interface AddEditEntryScreenProps {
   navigation?: any;
@@ -101,7 +103,7 @@ const AddEditEntryScreen: React.FC<AddEditEntryScreenProps> = (props) => {
     'pill', 'capsule', 'tablet', 'powder', 'liquid', 'syrup', 'gummy', 'softgel', 'drops', 'spray'
   ];
 
-  const doseUnits = ['pills', 'capsules', 'tablets', 'scoops', 'ml', 'mg', 'g', 'drops', 'sprays'];
+  const doseUnits = ['pills', 'capsules', 'tablets', 'scoops', 'ml', 'mg', 'g', 'drops', 'sprays',  'IU'];
   const mealTypes = ['breakfast', 'lunch', 'dinner', 'snack'];
   const intensityLevels = ['low', 'moderate', 'high'];
   const wellnessTypes = ['meditation', 'breathing', 'journaling', 'reading', 'mindfulness', 'spa', 'massage', 'relaxation', 'selfcare', 'stretching', 'other'];
@@ -110,7 +112,7 @@ const AddEditEntryScreen: React.FC<AddEditEntryScreenProps> = (props) => {
   const moodOptions = ['poor', 'fair', 'good', 'excellent'];
 
   const getDoseText = (): string => {
-    if (!supplementType || !doseAmount || !doseUnit) return '';
+    if (!doseAmount || !doseUnit) return '';
     return `${doseAmount} ${doseUnit}`;
   };
 
@@ -250,7 +252,12 @@ const AddEditEntryScreen: React.FC<AddEditEntryScreenProps> = (props) => {
         await EntryService.createEntry(entryData);
       }
 
-      if (navigation) { navigation.goBack(); } else if (onClose) { onClose(); }
+      // Handle navigation safely
+      if (navigation && typeof navigation.goBack === 'function') {
+        navigation.goBack();
+      } else if (onClose) {
+        onClose();
+      }
     } catch (error) {
       console.error('Error saving entry:', error);
       Alert.alert('Error', 'Failed to save entry. Please try again.');
@@ -272,33 +279,31 @@ const AddEditEntryScreen: React.FC<AddEditEntryScreenProps> = (props) => {
         containerStyle={styles.formPickerContainer}
       />
 
-      {supplementType && (
-        <View style={styles.doseContainer}>
-          <Text style={styles.label}>Dose</Text>
-          <View style={styles.doseInputs}>
-            <FormInput
-              label="Amount"
-              placeholder="Amount"
-              value={doseAmount}
-              onChangeText={setDoseAmount}
-              icon="straighten"
-              keyboardType="numeric"
-              containerStyle={styles.doseAmountInput}
-            />
-            <FormPicker
-              label="Unit"
-              value={doseUnit}
-              onValueChange={(itemValue) => setDoseUnit(itemValue)}
-              options={doseUnits.map(unit => ({ label: unit, value: unit }))}
-              placeholder="Unit"
-              containerStyle={styles.doseUnitPicker}
-            />
-          </View>
-          {getDoseText() && (
-            <Text style={styles.doseText}>{getDoseText()}</Text>
-          )}
+      <View style={styles.doseContainer}>
+        <Text style={[styles.label, { fontSize: typography.base, fontWeight: typography.semibold, color: colors.text, marginBottom: 8, letterSpacing: 0.5 }]}>Dose (Optional)</Text>
+        <View style={styles.doseInputs}>
+          <FormInput
+            label="Amount"
+            placeholder="Amount"
+            value={doseAmount}
+            onChangeText={setDoseAmount}
+            icon="straighten"
+            keyboardType="numeric"
+            containerStyle={styles.doseAmountInput}
+          />
+          <FormPicker
+            label="Unit"
+            value={doseUnit}
+            onValueChange={(itemValue) => setDoseUnit(itemValue)}
+            options={doseUnits.map(unit => ({ label: unit, value: unit }))}
+            placeholder="Unit"
+            containerStyle={styles.doseUnitPicker}
+          />
         </View>
-      )}
+        {getDoseText() && (
+          <Text style={styles.doseText}>{getDoseText()}</Text>
+        )}
+      </View>
     </View>
   );
 
@@ -591,6 +596,21 @@ const AddEditEntryScreen: React.FC<AddEditEntryScreenProps> = (props) => {
         {/* Bottom sheet container - 3/4 height */}
         <View style={styles.bottomSheetContainer}>
           <View style={styles.modalContainer}>
+            {/* Loading Overlay */}
+            {isLoading && (
+              <View style={styles.loadingOverlay}>
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#2563EB" />
+                  <Text style={styles.loadingText}>
+                    {isEditing ? 'Updating entry...' : 'Creating entry...'}
+                  </Text>
+                  <Text style={styles.loadingSubtext}>
+                    This may take a moment if you have scheduled activities
+                  </Text>
+                </View>
+              </View>
+            )}
+            
             {/* Header */}
             <View style={styles.header}>
               <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
@@ -615,59 +635,74 @@ const AddEditEntryScreen: React.FC<AddEditEntryScreenProps> = (props) => {
               style={styles.content}
               behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             >
-              <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-        {/* Basic Information Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Basic Information</Text>
-          
-          <FormInput
-            label="Title"
-            placeholder="Enter title"
-            value={title}
-            onChangeText={setTitle}
-            icon="edit"
-            required
-          />
+              <FlatList
+                data={[
+                  { id: 'basic', type: 'basic' },
+                  { id: 'category', type: 'category' },
+                  { id: 'save', type: 'save' }
+                ]}
+                renderItem={({ item }) => {
+                  switch (item.type) {
+                    case 'basic':
+                      return (
+                        <View style={styles.section}>
+                          <Text style={styles.sectionTitle}>Basic Information</Text>
+                          
+                          <FormInput
+                            label="Title"
+                            placeholder="Enter title"
+                            value={title}
+                            onChangeText={setTitle}
+                            icon="edit"
+                            required
+                          />
 
-          <FormInput
-            label="Label"
-            placeholder="Enter label (optional)"
-            value={label}
-            onChangeText={setLabel}
-            icon="label"
-          />
+                          <FormInput
+                            label="Label"
+                            placeholder="Enter label (optional)"
+                            value={label}
+                            onChangeText={setLabel}
+                            icon="label"
+                          />
 
-          <FormInput
-            label="Description"
-            placeholder="Enter description (optional)"
-            value={description}
-            onChangeText={setDescription}
-            icon="description"
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-            containerStyle={styles.textAreaContainer}
-          />
-        </View>
-
-        {/* Category-specific fields will be rendered here */}
-        {renderCategorySpecificFields()}
-
-
-        {/* Save Button */}
-        <View style={styles.buttonContainer}>
-          <FormButton
-            title={isLoading ? 'Saving...' : (isEditing ? 'Update Entry' : 'Create Entry')}
-            onPress={handleSave}
-            variant="primary"
-            size="large"
-            icon="save"
-            loading={isLoading}
-            disabled={isLoading}
-            fullWidth
-          />
-        </View>
-              </ScrollView>
+                          <FormInput
+                            label="Description"
+                            placeholder="Enter description (optional)"
+                            value={description}
+                            onChangeText={setDescription}
+                            icon="description"
+                            multiline
+                            numberOfLines={4}
+                            textAlignVertical="top"
+                            containerStyle={styles.textAreaContainer}
+                          />
+                        </View>
+                      );
+                    case 'category':
+                      return renderCategorySpecificFields();
+                    case 'save':
+                      return (
+                        <View style={styles.buttonContainer}>
+                          <FormButton
+                            title={isLoading ? 'Saving...' : (isEditing ? 'Update Entry' : 'Create Entry')}
+                            onPress={handleSave}
+                            variant="primary"
+                            size="large"
+                            icon="save"
+                            loading={isLoading}
+                            disabled={isLoading}
+                            fullWidth
+                          />
+                        </View>
+                      );
+                    default:
+                      return null;
+                  }
+                }}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.scrollViewContent}
+                showsVerticalScrollIndicator={false}
+              />
             </KeyboardAvoidingView>
           </View>
         </View>
@@ -690,7 +725,7 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  contentContainer: {
+  scrollViewContent: {
     padding: 20,
   },
   section: {
@@ -749,21 +784,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
     overflow: 'hidden',
   },
-  picker: {
-    height: 50,
-  },
+  // picker height is now handled by inputStyles.base
   doseContainer: {
     marginBottom: 16,
   },
   doseInputs: {
     flexDirection: 'row',
     gap: 12,
+    alignItems: 'flex-end', // Align items to bottom to match heights
   },
   doseAmountInput: {
     flex: 1,
+    marginBottom: 0, // Remove bottom margin to align with picker
   },
   doseUnitPicker: {
     flex: 1,
+    marginBottom: 0, // Remove bottom margin to align with input
   },
   dosePreview: {
     fontSize: 14,
@@ -862,6 +898,43 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
+  },
+  // Loading overlay styles
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingContainer: {
+    backgroundColor: '#FFFFFF',
+    padding: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 8,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 

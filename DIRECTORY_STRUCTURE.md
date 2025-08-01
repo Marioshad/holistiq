@@ -1,4 +1,4 @@
-# Healthyr App - Directory Structure
+# Holistiq App - Directory Structure
 
 ## 📁 New Organized Directory Structure
 
@@ -129,4 +129,4 @@ src/
 4. **Use the Style Guide** for consistent design patterns
 5. **Reference this documentation** for team onboarding
 
-The new structure provides a clean, organized foundation for the Healthyr app's continued development! 🎉 
+The new structure provides a clean, organized foundation for the Holistiq app's continued development! 🎉 

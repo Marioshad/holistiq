@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { TextInput, Button, Card, Title, Chip, Appbar, List } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
+import { MaterialIcons } from '@expo/vector-icons';
 
 import { RootStackParamList, MonthlyNote, ChecklistItem } from '../types';
 import StorageService from '../services/StorageService';
+import { shadows } from '../styles/styleGuide';
 
 type MonthlyDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'MonthlyDetail'>;
 type MonthlyDetailScreenRouteProp = RouteProp<RootStackParamList, 'MonthlyDetail'>;
@@ -128,7 +130,13 @@ const MonthlyDetailScreen: React.FC = () => {
       <Appbar.Header>
         <Appbar.BackAction onPress={() => navigation.goBack()} />
         <Appbar.Content title="Day Details" />
-        <Appbar.Action icon="check" onPress={saveMonthlyNote} />
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={saveMonthlyNote}
+        >
+          <MaterialIcons name="save" size={16} color="#FFFFFF" />
+          <Text style={styles.saveButtonText}>Save</Text>
+        </TouchableOpacity>
       </Appbar.Header>
 
       <ScrollView style={styles.scrollView}>
@@ -302,6 +310,22 @@ const styles = StyleSheet.create({
   },
   checkbox: {
     marginLeft: 8,
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgb(138, 101, 243)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 8,
+    gap: 8,
+    ...shadows.md,
+  },
+  saveButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
 

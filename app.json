@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Healthy Habits Tracker",
-    "slug": "healthy-habits-tracker",
+    "name": "Holistiq",
+    "slug": "holistiq",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -11,26 +11,41 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.marioshad.holistiq"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
-    },
-    "android": {
-      "permissions": [
-        "android.permission.DETECT_SCREEN_CAPTURE"
-      ],
-      "package": "com.marioshad.healthyhabitstracker"
+      "supportsTablet": true,
+      "bundleIdentifier": "com.marioshad.holistiq",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "web": {
       "bundler": "webpack",
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#2563EB"
+        }
+      ]
+    ],
     "extra": {
       "eas": {
-        "projectId": "247cf58a-3f16-42c5-aaa9-11a5d20493f7"
+        "projectId": "03a00f5b-594a-4cec-8f86-7421c404cd70"
       }
-    }
+    },
+    "owner": "marioshad"
   }
 }

@@ -1,4 +1,4 @@
-# Healthy Habits Tracker
+# Holistiq
 
 A comprehensive mobile app built with React Native and Expo for tracking daily healthy habits including meals, supplements, stretching, and exercise.
 
@@ -56,7 +56,7 @@ A comprehensive mobile app built with React Native and Expo for tracking daily h
 1. Clone the repository:
 ```bash
 git clone <repository-url>
-cd healthy-habits-tracker
+cd holistiq
 ```
 
 2. Install dependencies:

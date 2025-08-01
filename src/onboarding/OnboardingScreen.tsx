@@ -37,7 +37,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
     {
       id: '1',
       title: 'Welcome',
-      subtitle: 'to HealthyR',
+              subtitle: 'to Holistiq',
       description: 'Your personal wellness companion that helps you build healthy habits and track your journey to a better you.',
       icon: 'celebration',
       color: '#cccccc',

@@ -148,37 +148,37 @@ const EntryListScreen: React.FC<EntryListScreenProps> = ({ navigation, route }) 
       <View style={styles.overlay} />
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
         <View style={{
-          width: 40,
-          height: 40,
-          borderRadius: 20,
+          width: 36,
+          height: 36,
+          borderRadius: 18,
           backgroundColor: (categoryColors[item.category] || '#fff') + '70',
           justifyContent: 'center',
           alignItems: 'center',
-          marginRight: 12,
+          marginRight: 10,
         }}>
-          <MaterialCommunityIcons name={categoryIcons[item.category] as any} size={22} color="#5b5b5b" />
+          <MaterialCommunityIcons name={categoryIcons[item.category] as any} size={20} color="#5b5b5b" />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 18, fontWeight: '600', color: '#1F2937', marginBottom: 2 }}>{item.title}</Text>
-          {item.label && <Text style={{ fontSize: 14, color: '#6B7280' }}>{item.label}</Text>}
+          <Text style={{ fontSize: 16, fontWeight: '600', color: '#1F2937', marginBottom: 2 }}>{item.title}</Text>
+          {item.label && <Text style={{ fontSize: 12, color: '#6B7280' }}>{item.label}</Text>}
         </View>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={{ flexDirection: 'row', gap: 6 }}>
           <TouchableOpacity
-            style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center', marginRight: 4 }}
+            style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#8A65F3', justifyContent: 'center', alignItems: 'center', marginRight: 2 }}
             onPress={() => navigation.navigate('AddEditEntry', { category: item.category, entry: item, isEditing: true })}
           >
-            <MaterialCommunityIcons name="pencil" size={20} color="#6B7280" />
+            <MaterialCommunityIcons name="pencil" size={16} color="#FFFFFF" />
           </TouchableOpacity>
           <TouchableOpacity
-            style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' }}
+            style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' }}
             onPress={() => handleDeleteEntry(item)}
           >
-            <MaterialCommunityIcons name="delete" size={20} color="#EF4444" />
+            <MaterialCommunityIcons name="delete" size={16} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>
       {item.description && (
-        <Text style={{ fontSize: 14, color: '#6B7280', lineHeight: 20, marginBottom: 8 }}>{item.description}</Text>
+        <Text style={{ fontSize: 12, color: '#6B7280', lineHeight: 18, marginBottom: 8 }}>{item.description}</Text>
       )}
       {/* Add more details as needed */}
     </View>
@@ -204,12 +204,13 @@ const EntryListScreen: React.FC<EntryListScreenProps> = ({ navigation, route }) 
             <Text style={styles.title}>{categoryTitles[category]}</Text>
           </View>
           <TouchableOpacity
-            style={styles.addButton}
+            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#8A65F3', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, gap: 6, ...neumorphicShadow }}
             onPress={() => {
               navigation.navigate('AddEditEntry', { category });
             }}
           >
-            <MaterialCommunityIcons name="plus" size={24} color="#8A65F3"  style={{backgroundColor: '#8A65F340',width: 35, height: 35, borderRadius: 12, borderWidth: 2, padding: 5, borderColor: '#8A65F3', display: 'flex', alignItems: 'center', justifyContent: 'center'}} />
+            <MaterialCommunityIcons name="plus" size={16} color="#FFFFFF" />
+            <Text style={{ fontSize: 14, fontWeight: '600', color: '#FFFFFF' }}>Add</Text>
           </TouchableOpacity>
         </View>
 
@@ -226,8 +227,12 @@ const EntryListScreen: React.FC<EntryListScreenProps> = ({ navigation, route }) 
                 onChangeText={setSearchQuery}
               />
               {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <MaterialCommunityIcons name="close" size={20} color="#9CA3AF" />
+                <TouchableOpacity 
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#8A65F3', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8, gap: 4, ...neumorphicShadow }}
+                  onPress={() => setSearchQuery('')}
+                >
+                  <MaterialCommunityIcons name="close" size={14} color="#FFFFFF" />
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#FFFFFF' }}>Clear</Text>
                 </TouchableOpacity>
               )}
             </View>

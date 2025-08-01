@@ -15,7 +15,7 @@ const AboutScreen: React.FC = () => {
           <Card.Content>
             <View style={styles.headerContainer}>
               <MaterialIcons name="favorite" size={64} color="#6200EE" />
-              <Title style={styles.appTitle}>Healthy Habits Tracker</Title>
+              <Title style={styles.appTitle}>Holistiq</Title>
               <Paragraph style={styles.version}>Version 1.0.0</Paragraph>
             </View>
             
@@ -97,7 +97,7 @@ const AboutScreen: React.FC = () => {
               title="Rate the App"
               description="Leave a review on the app store"
               left={props => <List.Icon {...props} icon="star" />}
-              onPress={() => console.log('Rating feature coming soon')}
+              onPress={() => {}}
             />
           </Card.Content>
         </Card>
@@ -109,19 +109,19 @@ const AboutScreen: React.FC = () => {
               title="Privacy Policy"
               description="How we protect your data"
               left={props => <List.Icon {...props} icon="privacy-tip" />}
-              onPress={() => console.log('Privacy policy coming soon')}
+              onPress={() => {}}
             />
             <List.Item
               title="Terms of Service"
               description="App usage terms and conditions"
               left={props => <List.Icon {...props} icon="description" />}
-              onPress={() => console.log('Terms of service coming soon')}
+              onPress={() => {}}
             />
             <List.Item
               title="Open Source Licenses"
               description="Third-party licenses"
               left={props => <List.Icon {...props} icon="open-in-new" />}
-              onPress={() => console.log('Licenses coming soon')}
+              onPress={() => {}}
             />
           </Card.Content>
         </Card>
@@ -133,7 +133,7 @@ const AboutScreen: React.FC = () => {
               Built with ❤️ using React Native and Expo
             </Paragraph>
             <Paragraph style={styles.developerInfo}>
-              © 2025 Healthy Habits Tracker. All rights reserved.
+              © 2025 Holistiq. All rights reserved.
             </Paragraph>
           </Card.Content>
         </Card>

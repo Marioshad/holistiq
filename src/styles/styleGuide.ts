@@ -7,7 +7,7 @@ export const colors = {
   // Primary Colors
   primary: 'rgb(196, 154, 255)', // Updated purple
   secondary: '#66B6FF',
-  success: '#4CAF50',
+  success: '#81C784',
   alert: '#FF6B6B',
   warning: '#FFA726',
   
@@ -131,10 +131,11 @@ export const shadows = {
 // Button Styles
 export const buttonStyles = {
   primary: {
-    backgroundColor: colors.primary,
-    borderRadius: borderRadius.full,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
+    backgroundColor: 'rgb(138, 101, 243)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    marginTop: 8,
     ...shadows.md,
   },
   primaryText: {
@@ -148,7 +149,7 @@ export const buttonStyles = {
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.primary,
-    borderRadius: borderRadius.full,
+    borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 24,
   },
@@ -163,7 +164,7 @@ export const buttonStyles = {
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: borderRadius.full,
+    borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 24,
     ...shadows.sm,
@@ -177,7 +178,7 @@ export const buttonStyles = {
   },
   danger: {
     backgroundColor: colors.error,
-    borderRadius: borderRadius.full,
+    borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 24,
     ...shadows.md,
@@ -219,6 +220,7 @@ export const inputStyles = {
     borderRadius: borderRadius.xl,
     paddingHorizontal: 12,
     paddingVertical: 12,
+    minHeight: 68, // Ensure consistent height for all inputs
     ...shadows.sm,
   },
   focused: {
